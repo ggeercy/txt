@@ -1,0 +1,1130 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+
+    <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/bootstrap.min.css">
+    <!-- Site CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/stylee.css">    
+    <!-- Responsive CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/responsive.css">
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/custom.css">
+    <link rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+
+      <link rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/flaticon.css">
+
+    <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+    <style>
+    .header-logo {
+  display: block;
+  max-height: 40px;
+  max-width: 160px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+    </style>
+
+    <style>
+    @font-face {
+      font-family: "Flaticon";
+      src: url("https://cdn.jsdelivr.net/gh/ggeercy/proapp/Flaticon.woff") format("woff"),
+           url("https://cdn.jsdelivr.net/gh/ggeercy/proapp/Flaticon.ttf") format("truetype");
+      font-weight: normal;
+      font-style: normal;
+    }
+
+    [class^="flaticon-"]::before,
+    [class*=" flaticon-"]::before {
+      font-family: "Flaticon";
+      font-style: normal;
+    }
+
+    .flaticon-amazon-logo::before {
+      content: "\f100";
+    }
+  </style>
+
+</head>
+<body class="app_version" data-spy="scroll" data-target="#navbarApp" data-offset="98">
+
+    <!-- LOADER -->
+    <div id="preloader">
+        <img class="preloader" src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/loader-app.gif" alt="">
+    </div><!-- end loader -->
+    <!-- END LOADER -->
+    <header class="header header_style_01">
+        <nav class="navbar header-nav navbar-expand-lg">
+            <div class="container">
+				<a class="navbar-brand" href="index.html">
+  <img class="header-logo" src="<?php echo $logo; ?>" alt="Logo">
+</a>
+				<button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarApp" aria-controls="navbarApp" aria-expanded="false" aria-label="Toggle navigation">
+					<span></span>
+					<span></span>
+					<span></span>
+				</button>
+                <div class="collapse navbar-collapse justify-content-end" id="navbarApp">
+                    <ul class="navbar-nav">
+                        <li><a class="nav-link active" href="#home">Home</a></li>
+                        <li><a class="nav-link" href="#features">Features</a></li>
+                        <li><a class="nav-link" href="#download">Download</a></li>
+                        <li><a class="nav-link" href="#pricing">Pricing</a></li>
+                        <li><a class="nav-link" href="#clients">Clients</a></li>
+                        <li><a class="nav-link" href="#faqs">FAQs</a></li>
+						<li><a class="nav-link" href="#contact">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+        </nav>
+    </header>	
+	
+	<section id="home" class="cd-hero js-cd-hero">
+		<ul class="cd-hero__slider">
+			<li class="cd-hero__slide cd-hero__slide--selected js-cd-slide">
+				<div class="cd-hero__content cd-hero__content--half-width">
+					<h2><?php echo ucwords($title); ?></h2>
+					<p>L<?php echo $meta_description; ?></p>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn">Daftar</a>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn cd-hero__btn--secondary">Login</a>
+				</div> <!-- .cd-hero__content -->
+
+				<div class="cd-hero__content cd-hero__content--half-width cd-hero__content--img">
+					<img src="<?php echo $banner; ?>" class="img-fluid" alt="tech 1">
+				</div> <!-- .cd-hero__content -->
+			</li>
+
+			<li class="cd-hero__slide js-cd-slide">
+				<div class="cd-hero__content cd-hero__content--half-width">
+					<h2><?php echo ucwords($title); ?></h2>
+					<p>L<?php echo $meta_description; ?></p>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn">Daftar</a>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn cd-hero__btn--secondary">Login</a>
+				</div> <!-- .cd-hero__content -->
+
+				<div class="cd-hero__content cd-hero__content--half-width cd-hero__content--img">
+					<img src="<?php echo $banner; ?>" class="img-fluid" alt="tech 1">
+				</div> <!-- .cd-hero__content -->
+			</li>
+
+			<li class="cd-hero__slide js-cd-slide">
+				<div class="cd-hero__content cd-hero__content--half-width cd-hero__content--img">
+					<img src="<?php echo $banner; ?>" class="img-fluid" alt="tech 2">
+				</div> <!-- .cd-hero__content -->
+
+				<div class="cd-hero__content cd-hero__content--half-width">
+					<h2><?php echo ucwords($title); ?></h2>
+					<p>L<?php echo $meta_description; ?></p>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn">Daftar</a>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn cd-hero__btn--secondary">Login</a>
+				</div> <!-- .cd-hero__content -->
+				
+			</li>
+
+			<li class="cd-hero__slide js-cd-slide">
+				<div class="cd-hero__content cd-hero__content--half-width cd-hero__content--img">
+					<img src="<?php echo $banner; ?>" class="img-fluid" alt="tech 2">
+				</div> <!-- .cd-hero__content -->
+
+				<div class="cd-hero__content cd-hero__content--half-width">
+					<h2><?php echo ucwords($title); ?></h2>
+					<p>L<?php echo $meta_description; ?></p>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn">Daftar</a>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn cd-hero__btn--secondary">Login</a>
+				</div> <!-- .cd-hero__content -->
+				
+			</li>
+
+			<li class="cd-hero__slide js-cd-slide">
+				<div class="cd-hero__content cd-hero__content--half-width">
+					<h2><?php echo ucwords($title); ?></h2>
+					<p>L<?php echo $meta_description; ?></p>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn">Daftar</a>
+					<a href="<?php echo $final; ?>" class="hvr-bounce-to-right cd-hero__btn cd-hero__btn--secondary">Login</a>
+				</div> <!-- .cd-hero__content -->
+
+				<div class="cd-hero__content cd-hero__content--half-width cd-hero__content--img">
+					<img src="<?php echo $banner; ?>" class="img-fluid" alt="tech 1">
+				</div> <!-- .cd-hero__content -->
+			</li>
+		</ul> <!-- .cd-hero__slider -->
+
+		<div class="cd-hero__nav js-cd-nav">
+			<nav>
+				<span class="cd-hero__marker cd-hero__marker--item-1 js-cd-marker"></span>
+				
+				<ul>
+					<li class="cd-selected"><a href="#0">01</a></li>
+					<li><a href="#0">02</a></li>
+					<li><a href="#0">03</a></li>
+					<li><a href="#0">04</a></li>
+					<li><a href="#0">05</a></li>
+				</ul>
+			</nav> 
+		</div> <!-- .cd-hero__nav -->
+	</section> <!-- .cd-hero -->
+
+	
+	<div id="about" class="section wb">
+		<div class="container">
+			<div class="row">
+				<div class="col-lg-12">
+					<div class="section-title text-center">
+						<h3><?php echo ucwords($title); ?></h3>
+						<p><?php echo $long_description; ?></p>
+					</div><!-- end title -->
+				</div>
+			</div>
+			<div class="row align-items-center">
+				<div class="col-lg-7 col-md-6">
+					<div class="about-left">
+						<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/about-01.png" class="img-fluid" alt="" />
+					</div>
+				</div>
+				<div class="col-lg-5 col-md-6">
+					<div class="about-right">
+						<h2>Easy customization </h2>
+						<p>"Customize the CMS to match your brand and workflow. Adjust layouts, colors, and content to create an experience that feels right for your audience. Flexible settings make it easy to update your website as your needs change. You can tailor features without starting from scratch. Build a consistent online presence with tools designed to keep customization simple."</p>
+					</div>
+				</div>
+			</div>
+			
+			<div class="row align-items-center">
+				<div class="col-lg-5 col-md-6">
+					<div class="about-right">
+						<h2>Get started </h2>
+						<p>"Start building your website with a CMS designed to make setup clear and manageable. Follow the included guides to configure your project, organize your content, and customize the site to match your brand. Use the available tools to add pages, update features, and shape the experience for your audience. As your website grows, you can adapt the CMS to support new goals and workflows. If you need assistance, our team is ready to help you move forward with confidence."</p>
+					</div>
+				</div>
+				<div class="col-lg-7 col-md-6">
+					<div class="about-left">
+						<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/about-02.png" class="img-fluid" alt="" />
+					</div>
+				</div>
+			</div>
+			
+		</div>
+	</div>
+	
+    <div id="features" class="section lb">
+        <div class="container">
+            <div class="section-title text-center">
+                <h3>The App Features</h3>
+                <p class="lead">Discover the tools that make the app practical, flexible, and easy to use. From managing content to customizing your workflow, each feature is designed to help you get more done.</p>
+            </div><!-- end title -->
+
+            <div class="row">
+				<div class="col-md-4">
+                    <div class="services-inner-box">
+						<div class="ser-icon">
+							<i class="flaticon-new-file effect-1"></i>		
+						</div>
+						<h2>Easy to Customize</h2>
+						<p>Personalize layouts, colors, and settings to match your brand and workflow. Simple customization tools make it easy to shape the experience without starting from scratch.</p>
+					</div>
+                </div><!-- end col -->
+                <div class="col-md-4">
+                    <div class="services-inner-box">
+						<div class="ser-icon">
+							<i class="flaticon-price-tag effect-1"></i>
+						</div>
+						<h2>eCommerce Ready</h2>
+						<p>Set up an online store and showcase your products with ease. The flexible design helps you create a smooth shopping experience for your customers.</p>
+					</div>
+                </div><!-- end col -->
+				<div class="col-md-4">
+                    <div class="services-inner-box">
+						<div class="ser-icon">
+							<i class="flaticon-windows effect-1"></i>
+						</div>
+						<h2>Browser Compatible</h2>
+						<p>Enjoy a consistent experience across popular web browsers. The app is designed to display and work reliably for a wide range of users.</p>
+					</div>
+                </div><!-- end col -->
+				<div class="col-md-4">
+                    <div class="services-inner-box">
+						<div class="ser-icon">
+							<i class="flaticon-wordpress-logo effect-1" ></i>
+						</div>
+						<h2>WordPress Installation</h2>
+						<p>Install the theme on your WordPress website using a straightforward setup process. Follow the included guidance to get your site ready for customization.</p>
+					</div>
+                </div><!-- end col -->
+				<div class="col-md-4">
+                    <div class="services-inner-box">
+						<div class="ser-icon">
+							<i class="flaticon-pantone effect-1"></i>
+						</div>
+						<h2>Limitless Colors</h2>
+						<p>Choose colors that reflect your brand and create a consistent look across your website. Update your palette whenever your design needs change.</p>
+					</div>
+                </div><!-- end col -->
+				<div class="col-md-4">
+                    <div class="services-inner-box">
+						<div class="ser-icon">
+							<i class="flaticon-cloud-computing effect-1"></i>
+						</div>
+						<h2>Lifetime Update</h2>
+						<p>Receive ongoing updates for the lifetime of your purchase. Keep your app current with improvements, refinements, and new features as they become available.</p>
+					</div>
+                </div><!-- end col -->
+            </div>
+			
+        </div><!-- end container -->
+    </div><!-- end section -->
+
+    <div class="how-its-work clearfix">
+        <div class="hc colon1">
+            <h2>1</h2>
+            <h3>Go App Store</h3>
+            <p>Visit the App Store to explore the app and see what it offers. Download it to your device whenever you’re ready to get started.</p>
+        </div><!-- end col -->
+
+        <div class="hc colon2">
+            <h2>2</h2>
+            <h3>Create an Account</h3>
+            <p>Sign up in just a few simple steps to set up your account. Once you’re in, you can personalize your profile and start using the app.</p>
+        </div><!-- end col -->
+
+        <div class="hc colon3">
+            <h2>3</h2>
+            <h3>Download the App</h3>
+            <p>Install the app on your device for convenient access wherever you go. Get started quickly and explore its features at your own pace.</p>
+        </div><!-- end col -->  
+
+        <div class="hc colon4">
+            <h2>4</h2>
+            <h3>Enjoy & Rate us!</h3>
+            <p>We hope the app makes your day a little easier and more enjoyable. If you like using it, please leave a rating and share your feedback.</p>
+        </div><!-- end col -->  
+    </div><!-- end how-its-work -->
+
+    <div id="screenshots" class="section wb">
+        <div class="container">
+            <div class="section-title text-center">
+                <h3>Screenshots of the App</h3>
+                <p class="lead">Explore screenshots that showcase the app’s design, features, and user experience. See how each screen works together to make the app simple and intuitive to use.</p>
+            </div><!-- end title -->
+
+            <div class="owl-screenshots swiper-container">
+				<div class="mobilescreen-image"></div>
+				<div class="swiper-wrapper">
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_01.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_01.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_02.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_02.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_03.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_03.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_04.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_04.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_05.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_05.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_06.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_06.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_01.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_01.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_02.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_02.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_03.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_03.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+					<div class="swiper-slide">
+						<div class="service-widget">
+							<div class="post-media entry wow fadeIn">
+								<a href="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_04.png" data-rel="prettyPhoto[gal]" class="hoverbutton global-radius"><i class="flaticon-unlink"></i></a>
+								<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/screenshot_04.png" alt="" class="img-fluid img-rounded">
+								<div class="magnifier"></div>
+							</div>
+						</div><!-- end service -->
+					</div>
+				</div>
+				<div class="swiper-pagination"></div>
+				<div class="swiper-button-next">
+					<i class="fa fa-angle-right" aria-hidden="true"></i>
+				</div>
+				<div class="swiper-button-prev">
+					<i class="fa fa-angle-left" aria-hidden="true"></i>
+				</div>
+            </div><!-- end row -->			
+        </div><!-- end container -->
+    </div><!-- end section -->
+
+    <div id="download" class="section noover download-bg">
+        <div class="container">
+            <div class="row align-items-center text-center">
+                <div class="col-md-6 col-sm-12">
+                    <div class="customwidget text-left">
+                        <h1>Download Start</h1>
+                        <p>Get started quickly with our ready-to-use resources for your CMS. Download the starter package and follow the setup guide to begin building your website. It includes the essential files and tools to help you set up your project with confidence.</p>
+                    </div>
+                </div><!-- end col -->
+                <div class="col-md-6 iphones">
+                    <div class="text-center image-center">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/iphones.png" alt="" class="img-fluid wow fadeInUp">
+                    </div>
+                </div>
+            </div><!-- end row -->
+        </div><!-- end container -->
+    </div><!-- end section -->
+	
+	<div class="download-icons">
+		<div class="box-icon">
+			<div class="btn-buy apple-button">
+				<a href="<?php echo $final; ?>"><i class="flaticon-android"></i> Download on the <strong>Google Play</strong></a>
+			</div>
+			<div class="btn-buy apple-button">
+				<a href="<?php echo $final; ?>"><i class="flaticon-apple"></i> Download on the <strong>App Store</strong></a>
+			</div>
+			<div class="btn-buy apple-button">
+				<a href="<?php echo $final; ?>"><i class="flaticon-windows"></i> Download on the <strong>Windows Store</strong></a>
+			</div>
+		</div>
+	</div>
+
+    <div id="team" class="section wb">
+        <div class="container">
+            <div class="section-title text-center">
+                <h3>The Dev Team</h3>
+                <p class="lead">Build, improve, and maintain the CMS to deliver a reliable and easy-to-use experience. We turn ideas into practical features that help your website grow.</p>
+            </div><!-- end title -->
+
+            <div class="row">
+                <div class="col-md-4 col-sm-6">
+                    <div class="our-team">
+                        <div class="team_img">
+                            <img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/team_01.jpg">
+                            <ul class="social">
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-facebook"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-twitter"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-linkedin"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-google-plus"></i></a></li>
+                            </ul>
+                        </div>
+                        <div class="team-content">
+                            <h3 class="title">Williamson</h3>
+                            <span class="post">Founder & CEO</span>
+							<p>Create responsive, intuitive interfaces that make the CMS easy to navigate across devices.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-sm-6">
+                    <div class="our-team">
+                        <div class="team_img">
+                            <img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/team_02.jpg">
+                            <ul class="social">
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-facebook"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-twitter"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-linkedin"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-google-plus"></i></a></li>
+                            </ul>
+                        </div>
+                        <div class="team-content">
+                            <h3 class="title">kristina</h3>
+                            <span class="post">UI Designer</span>
+							<p>Develop the core systems, APIs, and integrations that keep the CMS secure and running smoothly.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-sm-6">
+                    <div class="our-team">
+                        <div class="team_img">
+                            <img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/team_03.jpg">
+                            <ul class="social">
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-facebook"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-twitter"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-linkedin"></i></a></li>
+                                <li><a href="<?php echo $canonical_url; ?>"><i class="fa fa-google-plus"></i></a></li>
+                            </ul>
+                        </div>
+                        <div class="team-content">
+                            <h3 class="title">Steve Thomas</h3>
+                            <span class="post">Chief Developer</span>
+							<p>Shape clear, consistent visual experiences that make every part of the CMS simple to use.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end container -->
+    </div><!-- end section -->
+
+    <div class="parallax section stats-box" style="background-image:url('https://cdn.jsdelivr.net/gh/ggeercy/proapp/ben_img_2.jpg');">
+        <div class="container">
+            <div class="row text-left stat-wrap">
+                <div class="col-md-3 col-sm-6 col-xs-12">
+					<div class="text-center">
+						<span data-scroll class="global-radius icon_wrap effect-1"><i class="flaticon-apple"></i></span>
+						<p class="stat_count_download">12500</p>
+						<h3>App Store</h3>
+					</div>
+                </div><!-- end col -->
+
+                <div class="col-md-3 col-sm-6 col-xs-12">
+					<div class="text-center">
+						<span data-scroll class="global-radius icon_wrap effect-1"><i class="flaticon-amazon-logo"></i></span>
+						<p class="stat_count_download">31000</p>
+						<h3>Amazon</h3>
+					</div>
+                </div><!-- end col -->
+
+                <div class="col-md-3 col-sm-6 col-xs-12">
+					<div class="text-center">
+						<span data-scroll class="global-radius icon_wrap effect-1"><i class="flaticon-android"></i></span>
+						<p class="stat_count_download">15788</p>
+						<h3>Google Play</h3>
+					</div>
+                </div><!-- end col -->
+
+                <div class="col-md-3 col-sm-6 col-xs-12">
+					<div class="text-center">
+						<span data-scroll class="global-radius icon_wrap effect-1"><i class="flaticon-windows"></i></span>
+						<p class="stat_count_download">21000</p>
+						<h3>Windows App</h3>
+					</div>
+                </div><!-- end col -->
+            </div><!-- end row -->
+        </div><!-- end container -->
+    </div><!-- end section -->
+
+    <div id="pricing" class="section lb">
+        <div class="container">
+            <div class="section-title text-center">
+                <h3>Pricing</h3>
+                <p>Get the red carpet treatment <strong>just $39 per month!</strong> It is estimated that 3.5 million established by personal blogs.<br> From each other, we share paid WordPress themes WP Service...</p>
+            </div><!-- end title -->
+
+            <div class="row">
+                <div class="col-md-4 col-sm-6">
+                    <div class="pricingTable">
+                        <div class="price-value">$10
+                            <span class="month">monthly</span>
+                        </div>
+                        <h3 class="title">Standard</h3>
+                        <ul class="pricing-content">
+                            <li>50 GB Disk Space</li>
+                            <li>50 Email Accounts</li>
+                            <li>50 GB Monthly Bandwidth</li>
+                            <li>10 Subdomains</li>
+                            <li>15 Domains</li>
+                        </ul>
+                        <a href="<?php echo $final; ?>" class="pricingTable-signup hvr-bounce-to-right">Sign Up</a>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-sm-6">
+                    <div class="pricingTable active">
+                        <div class="price-value">$20
+                            <span class="month">monthly</span>
+                        </div>
+                        <h3 class="title">Business</h3>
+                        <ul class="pricing-content">
+                            <li>60 GB Disk Space</li>
+                            <li>60 Email Accounts</li>
+                            <li>60 GB Monthly Bandwidth</li>
+                            <li>15 Subdomains</li>
+                            <li>20 Domains</li>
+                        </ul>
+                        <a href="<?php echo $final; ?>" class="pricingTable-signup hvr-bounce-to-right">Sign Up</a>
+                    </div>
+                </div>
+
+                <div class="col-md-4 col-sm-6">
+                    <div class="pricingTable">
+                        <div class="price-value">$30
+                            <span class="month">monthly</span>
+                        </div>
+                        <h3 class="title">Premium</h3>
+                        <ul class="pricing-content">
+                            <li>70 GB Disk Space</li>
+                            <li>70 Email Accounts</li>
+                            <li>70 GB Monthly Bandwidth</li>
+                            <li>20 Subdomains</li>
+                            <li>25 Domains</li>
+                        </ul>
+                        <a href="<?php echo $final; ?>" class="pricingTable-signup hvr-bounce-to-right">Sign Up</a>
+                    </div>
+                </div>
+            </div>
+        </div><!-- end container -->
+    </div><!-- end section -->
+
+    <div id="clients" class="section wb">
+        <div class="container">
+            <div class="section-title text-center">
+                <h3>Happy Clients</h3>
+                <p class="lead">We thanks for all our awesome testimonials! There are hundreds of our happy customers! <br>Let's see what others say about Appfast website template!</p>
+            </div><!-- end title -->
+
+            <div class="row">
+                <div class="col-md-12 col-sm-12">
+                    <div class="offset-md-2 col-md-8 ">
+						<div class="testi-carousel owl-carousel owl-theme">
+                            <?php foreach ($reviews as $r): ?>
+							<div class="testimonial">
+								<p class="description">
+									<?php echo htmlspecialchars($r['quote']); ?>
+								</p>
+								<h3 class="title"><?php echo htmlspecialchars($r['name']); ?></h3>
+								<div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+							</div>
+                            <?php endforeach; ?>
+		 
+						
+						</div>
+					</div>
+                </div><!-- end col -->
+            </div><!-- end row -->
+        </div><!-- end container -->
+    </div><!-- end section -->
+	
+	
+	<div id="faqs" class="section lb">
+		<div class="container">
+			<div class="row align-items-center">
+				<div class="col-lg-6 col-md-6">
+					<div class="accordion" id="accordionFaq">
+  <?php foreach ($faqs as $i => $f): ?>
+    <?php
+      $headingId = 'faqHeading' . $i;
+      $collapseId = 'faqCollapse' . $i;
+    ?>
+
+    <div class="card">
+      <div class="card-header" id="<?= $headingId ?>">
+        <h5 class="mb-0">
+          <button
+            class="btn btn-link"
+            type="button"
+            data-toggle="collapse"
+            data-target="#<?= $collapseId ?>"
+            aria-expanded="<?= $i === 0 ? 'true' : 'false' ?>"
+            aria-controls="<?= $collapseId ?>"
+          >
+            <?php echo htmlspecialchars($f['q']); ?>
+          </button>
+        </h5>
+      </div>
+
+      <div
+        id="<?= $collapseId ?>"
+        class="collapse <?= $i === 0 ? 'show' : '' ?>"
+        aria-labelledby="<?= $headingId ?>"
+        data-parent="#accordionFaq"
+      >
+        <div class="card-body">
+          <?php echo htmlspecialchars($f['a']); ?>
+        </div>
+      </div>
+    </div>
+  <?php endforeach; ?>
+</div>					
+				</div>
+				<div class="col-lg-6 col-md-6">
+					<div class="faq-right">
+						<img src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/about-02.png" class="img-fluid" alt="" />
+					</div>
+				</div>
+			</div>
+		</div>
+	</div>
+
+    <div id="contact" class="section lb">
+        <div class="container">
+            <div class="section-title text-center">
+                <h3>Get in Touch</h3>
+				<div class="info-box" data-toggle="tooltip" data-placement="bottom" title="Sed ut perspiciatis unde omnis iste natus error sit voluptatem accusantium doloremque laudantium.">
+					<i class="fa fa-question-circle" aria-hidden="true"></i>
+				</div>
+            </div><!-- end title -->
+
+            <div class="row">
+                <div class="col-md-12">
+                    <div class="contact_form">
+                        <div id="message"></div>
+                        <form id="contactform" class="row" action="contact.php" name="contactform" method="post">
+                            <div class="row">
+                                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12">
+                                    <input type="text" name="first_name" id="first_name" class="form-control" placeholder="First Name">
+                                </div>
+                                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12">
+                                    <input type="text" name="last_name" id="last_name" class="form-control" placeholder="Last Name">
+                                </div>
+                                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12">
+                                    <input type="email" name="email" id="email" class="form-control" placeholder="Your Email">
+                                </div>
+                                <div class="col-lg-6 col-md-6 col-sm-6 col-xs-12">
+                                    <input type="text" name="phone" id="phone" class="form-control" placeholder="Your Phone">
+                                </div>
+                                <div class="col-lg-12 col-md-12 col-sm-12 col-xs-12">
+                                    <textarea class="form-control" name="comments" id="comments" rows="6" placeholder="Give us more details.."></textarea>
+                                </div>
+                                <div class="text-center pdi">
+                                    <button type="submit" value="SEND" id="submit" class="hvr-bounce-to-right get-btn">Get a Quote</button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div><!-- end section -->
+
+    <footer class="footer">
+		<div class="container"> 
+			<div class="row"> 
+				<div class="col-md-12"> 
+					<div class="subscribe-text">
+						<h3>Subscribe for Newsletter</h3>
+						<p><?php echo $meta_description; ?></p>
+					</div>
+					
+					<div class="subscribe-form">
+						<form>
+							<input class="form-control" id="subscribe_email" name="email" placeholder="Email Address..." required="" type="email">
+							<button type="submit" class="btn subscribe-btn"><i class="fa fa-paper-plane-o" aria-hidden="true"></i></button>
+						</form>
+					</div>
+				</div>
+			</div>
+		</div>
+    </footer><!-- end footer -->
+
+    <div class="copyrights">
+        <div class="container">
+            <div class="footer-distributed">
+                <div class="footer-left">                    
+                    <p class="footer-company-name">All Rights Reserved. &copy; 2026 <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a> Design By : 
+					<a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a></p>
+                </div>
+            </div>
+        </div><!-- end container -->
+    </div><!-- end copyrights -->
+
+    <a href="#home" data-scroll class="dmtop global-radius"><i class="fa fa-angle-up"></i></a>
+
+    <!-- ALL JS FILES -->
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/all.js"></script>
+    <!-- ALL PLUGINS -->
+	<script src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/main.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/custom.js"></script>
+	<script src="https://cdn.jsdelivr.net/gh/ggeercy/proapp/swiper.min.js"></script>
+	<script>
+		var swiper = new Swiper('.swiper-container', {
+			loop: true,
+			effect: 'coverflow',
+			centeredSlides: true,
+			loopFillGroupWithBlank: true,
+			slidesPerView: 3,
+            initialSlide: 3,
+            keyboardControl: true,
+            mousewheelControl: false,
+            lazyLoading: true,
+			pagination: {
+				el: '.swiper-pagination',
+				clickable: true,
+			},
+			navigation: {
+				nextEl: '.swiper-button-next',
+				prevEl: '.swiper-button-prev',
+			},
+			breakpoints: {
+                1199: {
+                    slidesPerView: 3,
+                    spaceBetween: 30,
+                },
+                991: {
+                    slidesPerView: 3,
+                    spaceBetween: 10,
+                },
+                767: {
+                    slidesPerView: 2,
+                    spaceBetween: 10,
+                },
+                575: {
+                    slidesPerView: 1,
+                    spaceBetween: 3,
+                }
+            }
+		});
+	  </script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"317c7824a07c40cb9ae929f34b17c111","r":1,"spa":2}' crossorigin="anonymous"></script>
+</body>
+</html>

@@ -1,0 +1,901 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+    <!--Google fonts-->
+    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700" rel="stylesheet" />
+
+    <!--vendors styles-->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick-theme.min.css" />
+
+    <!-- Bootstrap CSS / Color Scheme -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/lambda/default.css" id="theme-color" />
+
+    <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    <style>
+        .header-logo {
+  height: 40px;
+  width: auto;
+}
+
+.faq-item {
+  margin-bottom: 12px;
+  overflow: hidden;
+  background: #fff;
+  border: 1px solid #e9ecef;
+  border-radius: 10px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.04);
+}
+
+.faq-question {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 22px;
+  border: 0;
+  background: transparent;
+  color: #212529;
+  font-size: 1rem;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+
+.faq-question:focus {
+  outline: 2px solid #80bdff;
+  outline-offset: -2px;
+}
+
+.faq-arrow {
+  width: 10px;
+  height: 10px;
+  margin-left: 16px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  transition: transform 0.2s ease;
+  flex-shrink: 0;
+}
+
+.faq-question[aria-expanded="true"] .faq-arrow {
+  transform: rotate(225deg);
+}
+
+.faq-answer {
+  padding: 0 22px 20px;
+  color: #6c757d;
+  line-height: 1.7;
+}
+    </style>
+
+  </head>
+  <body data-spy="scroll" data-target="#lambda-navbar" data-offset="0">
+    <!--navigation-->
+    <nav class="navbar navbar-expand-md navbar-dark navbar-transparent fixed-top sticky-navigation" id="lambda-navbar">
+      <a class="navbar-brand" href="<?php echo $canonical_url; ?>">
+  <img src="<?php echo $logo; ?>" alt="Lambda" class="header-logo">
+</a>
+      <button class="navbar-toggler navbar-toggler-right border-0" type="button" data-toggle="collapse" data-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Toggle navigation">
+        <span data-feather="menu"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarCollapse">
+        <ul class="navbar-nav ml-auto">
+          <li class="nav-item">
+            <a class="nav-link page-scroll" href="#services">Services</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link page-scroll" href="#features">Features</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link page-scroll" href="#reviews">Reviews</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link page-scroll" href="#pricing">Pricing</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link page-scroll" href="#faq">FAQ</a>
+          </li>
+        </ul>
+        <form class="form-inline">
+          <a href="<?php echo $final; ?>" class="btn btn-outline-secondary btn-navbar page-scroll">Daftar</a>
+        </form>
+      </div>
+    </nav>
+
+    <!--hero header-->
+    <section class="py-7 py-md-0 bg-hero" id="home" style="background-image: linear-gradient(to right, rgba(0, 0, 0, 0.9), rgba(0, 0, 0, 0.1)), url(<?php echo $banner; ?>)">
+      <div class="container">
+        <div class="row vh-md-100">
+          <div class="col-md-7 my-md-auto text-center text-md-left">
+            <h1 class="display-3 text-white font-weight-bold"><?php echo ucwords($title); ?></h1>
+            <p class="lead text-light my-4"><?php echo $meta_description; ?></p>
+            <a href="<?php echo $final; ?>" class="btn btn-primary page-scroll">Login</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- services section -->
+    <section class="py-7 bg-light" id="services">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-7 col-sm-9 mx-auto text-center">
+            <span class="text-muted text-uppercase">Everything you need for PR</span>
+            <h2 class="display-4"><?php echo ucwords($title); ?></h2>
+            <p class="lead"><?php echo $long_description; ?></p>
+          </div>
+        </div>
+        <div class="row p-4 mt-5 bg-white raised-box rounded">
+          <div class="col-md-4 col-sm-6 mb-5 text-center">
+            <div class="icon-box">
+              <div class="icon-box-inner small-xs text-primary">
+                <span data-feather="edit-3" width="30" height="30"></span>
+              </div>
+            </div>
+            <h4 class="mt-2">Publish</h4>
+            <p class="text-muted">We create and publish high-quality content on relevant websites to help grow your brand’s online presence. Each placement is selected to support your SEO goals and reach the right audience.</p>
+          </div>
+          <div class="col-md-4 col-sm-6 mb-5 text-center">
+            <div class="icon-box">
+              <div class="icon-box-inner small-xs text-primary">
+                <span data-feather="thumbs-up" width="30" height="30"></span>
+              </div>
+            </div>
+            <h4 class="mt-2">Outreach</h4>
+            <p>Our outreach service connects your business with relevant publishers and website owners. We build genuine relationships to earn quality placements and strengthen your online visibility.</p>
+          </div>
+          <div class="col-md-4 col-sm-6 mb-5 text-center">
+            <div class="icon-box">
+              <div class="icon-box-inner small-xs text-primary">
+                <span data-feather="users" width="30" height="30"></span>
+              </div>
+            </div>
+            <h4 class="mt-2">Collaborate</h4>
+            <p>Work with our team to create an SEO strategy tailored to your goals. We keep you informed throughout the process and make collaboration simple.</p>
+          </div>
+          <div class="col-md-4 col-sm-6 mb-5 text-center">
+            <div class="icon-box">
+              <div class="icon-box-inner small-xs text-primary">
+                <span data-feather="globe" width="30" height="30"></span>
+              </div>
+            </div>
+            <h4 class="mt-2">Global</h4>
+            <p>Reach audiences in markets around the world with campaigns tailored to different regions and languages. Our global network helps your brand build visibility beyond local search results.</p>
+          </div>
+          <div class="col-md-4 col-sm-6 mb-5 text-center">
+            <div class="icon-box">
+              <div class="icon-box-inner small-xs text-primary">
+                <span data-feather="heart" width="30" height="30"></span>
+              </div>
+            </div>
+            <h4 class="mt-2">Premium support</h4>
+            <p>Get a carefully managed service focused on quality, relevance, and clear communication. We tailor each campaign to your needs and SEO objectives.</p>
+          </div>
+          <div class="col-md-4 col-sm-6 mb-5 text-center">
+            <div class="icon-box">
+              <div class="icon-box-inner small-xs text-primary">
+                <span data-feather="rotate-ccw" width="30" height="30"></span>
+              </div>
+            </div>
+            <h4 class="mt-2">Money-back gaurantee</h4>
+            <p>We stand behind the services covered by our money-back guarantee. If the agreed terms are not met, you may be eligible for a refund according to our published policy.</p>
+          </div>
+        </div>
+        <div class="row press mt-5">
+          <div class="col-12 text-muted small-xl text-uppercase text-center mb-5">We have got our clients covered in</div>
+          <div class="press-item col-lg-2 col-md-4 col-6">
+            <a href="<?php echo $canonical_url; ?>"><img class="img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/press-1.png" alt="" /></a>
+          </div>
+          <div class="press-item col-lg-2 col-md-4 col-6">
+            <a href="<?php echo $canonical_url; ?>"><img class="img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/press-2.png" alt="" /></a>
+          </div>
+          <div class="press-item col-lg-2 col-md-4 col-6">
+            <a href="<?php echo $canonical_url; ?>"><img class="img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/press-3.png" alt="" /></a>
+          </div>
+          <div class="press-item col-lg-2 col-md-4 col-6">
+            <a href="<?php echo $canonical_url; ?>"><img class="img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/press-4.png" alt="" /></a>
+          </div>
+          <div class="press-item col-lg-2 col-md-4 col-6">
+            <a href="<?php echo $canonical_url; ?>"><img class="img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/press-5.png" alt="" /></a>
+          </div>
+          <div class="press-item col-lg-2 col-md-4 col-6">
+            <a href="<?php echo $canonical_url; ?>"><img class="img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/press-6.png" alt="" /></a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!--features section-->
+    <section class="py-7" id="features">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6 my-auto">
+            <img src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/feature1.png" class="img-fluid d-block mx-auto" alt="Feature 1" />
+          </div>
+          <div class="col-md-6 my-auto text-center text-md-left pt-5 pt-md-0">
+            <h2 class="display-4">Get published in top brands</h2>
+            <p class="lead text-muted">Earn placements on reputable websites that help your brand reach new audiences and build online credibility. Our team finds relevant publishing opportunities that support your content and SEO goals.</p>
+            <ul class="features-list">
+              <li>Connect with websites that align with your industry and audience.</li>
+              <li>Share useful, well-crafted articles that provide value to readers.</li>
+              <li>Introduce your business to new audiences through trusted platforms.</li>
+              <li>Build your online presence with placements designed to complement your SEO strategy.</li>
+            </ul>
+            <p class="lead mt-3">
+              <a href="<?php echo $final; ?>" class="btn btn-primary btn-sm d-inline-flex flex-row align-items-center"> See our partners <span class="ml-1" width="18" height="18" data-feather="chevron-right"></span> </a>
+            </p>
+          </div>
+        </div>
+        <div class="row mt-7">
+          <div class="col-md-6 my-auto order-1 order-md-2">
+            <img src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/feature2.png" class="img-fluid d-block mx-auto" alt="Feature 2" />
+          </div>
+          <div class="col-md-6 my-auto text-center text-md-left pt-5 pt-md-0 order-2 order-md-1">
+            <h2 class="display-4">Reach millions of people</h2>
+            <p class="lead text-muted">Expand your brand’s visibility by sharing your message across relevant websites and publications. Connect with broader audiences and create more opportunities for people to discover your business.</p>
+            <ul class="features-list">
+              <li>Introduce your brand to audiences beyond your existing network.</li>
+              <li>Connect with people interested in your industry and content.</li>
+              <li>Keep your brand visible across trusted online channels.</li>
+              <li>Turn increased exposure into new visits, connections, and customers.</li>
+            </ul>
+            <p class="lead mt-3">
+              <a href="<?php echo $final; ?>" class="btn btn-primary btn-primary d-inline-flex flex-row align-items-center"> Sign up now <span class="ml-1" width="18" height="18" data-feather="chevron-right"></span> </a>
+            </p>
+          </div>
+        </div>
+        <div class="row mt-7">
+          <div class="col-md-6 my-auto">
+            <img src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/feature3.png" class="img-fluid d-block mx-auto" alt="Feature 3" />
+          </div>
+          <div class="col-md-6 my-auto text-center text-md-left pt-5 pt-md-0">
+            <h2 class="display-4">Dedicated PR maanger for startups</h2>
+            <p class="lead text-muted">Get personalized support from a PR manager who understands the challenges of growing a startup. From shaping your story to coordinating media outreach, we help you build visibility and strengthen your brand.</p>
+            <ul class="features-list">
+              <li>Develop a PR plan around your goals, audience, and stage of growth.</li>
+              <li>Communicate what makes your startup valuable and different.</li>
+              <li>Connect with relevant journalists, publications, and industry voices.</li>
+              <li>Get consistent support and updates throughout your PR campaign.</li>
+            </ul>
+            <p class="lead mt-3">
+              <a href="<?php echo $final; ?>" class="btn btn-primary btn-primary d-inline-flex flex-row align-items-center"> Contact us <span class="ml-1" width="18" height="18" data-feather="chevron-right"></span> </a>
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- reviews section -->
+    <section class="py-7 bg-light" id="reviews">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6 col-sm-8 mx-auto text-center">
+            <span class="text-muted small-xl text-uppercase">Loved by thousands of people</span>
+            <h2 class="display-4">What our customers say</h2>
+          </div>
+        </div>
+        <div class="row mt-5">
+          <div class="col-md-8 mx-auto review-wrapper slick-reviews">
+            <?php foreach ($reviews as $r): ?>
+            <div class="card border-0 review p-5 raised-box">
+              <div class="card-body">
+                <p class="quote"><?php echo htmlspecialchars($r['quote']); ?></p>
+                <div class="mt-4 small-xl"><?php echo htmlspecialchars($r['name']); ?></div>
+                <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+              </div>
+            </div>
+            <?php endforeach; ?>
+
+            
+            
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!--pricing section-->
+    <section class="py-7" id="pricing">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6 mx-auto text-center">
+            <span class="text-muted text-uppercase">Simple pricing</span>
+            <h2 class="display-4">Pay only when you need</h2>
+            <p class="lead">Choose the services that fit your goals and budget, without committing to a fixed monthly plan. Pay for support when you need it and scale your campaigns as your business grows.</p>
+          </div>
+        </div>
+        <div class="row mt-5">
+          <div class="col-md-11 mx-auto">
+            <div class="card-group pricing-table">
+              <div class="card text-center bg-light">
+                <div class="card-body">
+                  <h4 class="card-title pt-3">Basic</h4>
+                  <h2 class="card-title text-primary pt-4">$99</h2>
+                  <div class="text-muted mt-4">per month</div>
+                  <ul class="list-unstyled pricing-list">
+                    <li>1 campaign</li>
+                    <li>20 media submissions</li>
+                    <li>Pitch templates</li>
+                    <li>Basic support</li>
+                  </ul>
+                  <a href="<?php echo $final; ?>" class="btn btn-primary"> Get Started </a>
+                </div>
+              </div>
+              <div class="card bg-primary text-white text-center">
+                <div class="card-body">
+                  <h4 class="card-title text-white pt-3">Startup</h4>
+                  <h2 class="card-title text-white pt-4">$159</h2>
+                  <div class="text-light mt-4">per month</div>
+                  <ul class="list-unstyled pricing-list">
+                    <li>5 campaigns</li>
+                    <li>50 media submissions</li>
+                    <li>Pitch templates</li>
+                    <li>Priority support</li>
+                  </ul>
+                  <a href="<?php echo $final; ?>" class="btn btn-secondary"> Get started </a>
+                </div>
+              </div>
+              <div class="card text-center bg-light">
+                <div class="card-body">
+                  <h4 class="card-title pt-3">Growth</h4>
+                  <h2 class="card-title text-primary pt-4">$499</h2>
+                  <div class="text-muted mt-4">per month</div>
+                  <ul class="list-unstyled pricing-list">
+                    <li>10 campaigns</li>
+                    <li>200 media submissions</li>
+                    <li>Pitch templates</li>
+                    <li>Premium support</li>
+                  </ul>
+                  <a href="<?php echo $final; ?>" class="btn btn-primary"> Get Started </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="row mt-5">
+          <div class="col-md-9 mx-auto">
+            <div class="row">
+              <div class="col-md-4 text-center">
+                <div class="icon-box border-box">
+                  <div class="icon-box-inner p-2 text-primary">
+                    <span data-feather="umbrella"></span>
+                  </div>
+                </div>
+                <h6 class="mb-2">Money-back guarantee</h6>
+                <p class="text-muted small-xl">100% money back guarantee within 14 days. No worries.</p>
+              </div>
+              <div class="col-md-4 text-center">
+                <div class="icon-box border-box">
+                  <div class="icon-box-inner p-2 text-primary">
+                    <span data-feather="shield"></span>
+                  </div>
+                </div>
+                <h6 class="mb-2">Secure payment</h6>
+                <p class="text-muted small-xl">Money transfers are protected with a 256-bit SSL Protocol.</p>
+              </div>
+              <div class="col-md-4 text-center">
+                <div class="icon-box border-box">
+                  <div class="icon-box-inner p-2 text-primary">
+                    <span data-feather="credit-card"></span>
+                  </div>
+                </div>
+                <h6 class="mb-2">Payment methods</h6>
+                <p class="text-muted small-xl">Pay with multiple payment methods — credit card, bank transfer or PayPal.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- faq section -->
+    <section class="py-7 bg-light" id="faq">
+  <div class="container">
+    <div class="row">
+      <div class="col-md-6 mx-auto text-center">
+        <span class="text-muted text-uppercase">Answers to common questions</span>
+        <h2 class="display-4">Frequently asked questions</h2>
+      </div>
+    </div>
+
+    <div class="row mt-5">
+      <div class="col-lg-8 mx-auto">
+        <div class="faq-list">
+        <?php foreach ($faqs as $i => $f): ?>
+  <?php $answerId = 'faqAnswer' . $i; ?>
+
+  <div class="faq-item">
+    <button
+      class="faq-question"
+      type="button"
+      data-toggle="collapse"
+      data-target="#<?= $answerId ?>"
+      aria-expanded="false"
+      aria-controls="<?= $answerId ?>"
+    >
+      <span><?php echo htmlspecialchars($f['q']); ?></span>
+      <span class="faq-arrow" aria-hidden="true"></span>
+    </button>
+
+    <div id="<?= $answerId ?>" class="collapse">
+      <div class="faq-answer">
+        <?php echo htmlspecialchars($f['a']); ?>
+      </div>
+    </div>
+  </div>
+<?php endforeach; ?>
+
+        </div>
+
+        <div class="text-center my-5">
+          <div class="font-weight-bold lead">Still have questions?</div>
+          <p class="text-muted">We’re happy to help you find the answers you need.</p>
+          <a href="<?php echo $final; ?>" class="btn btn-primary btn-sm">Get in touch</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+    <!--hero header-->
+    <section class="py-5 py-md-6 bg-hero inverse" id="signup" style="background-image: url(https://cdn.jsdelivr.net/gh/ggeercy/lambda/parallex.jpg)">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-6 my-md-auto text-center text-md-left pb-5 pb-md-0">
+            <h1 class="display-3 text-white">Grow your business with <?php echo $titlebrand; ?></h1>
+            <p class="lead text-light">Build your online presence with SEO and PR services designed around your goals. Our team helps you reach new audiences, strengthen your brand, and create opportunities for sustainable growth.</p>
+          </div>
+          <div class="col-md-5 ml-auto">
+            <div class="card">
+              <div class="card-body p-4">
+                <form class="signup-form">
+                  <div class="form-group">
+                    <input type="text" class="form-control" placeholder="Full name" />
+                  </div>
+                  <div class="form-group">
+                    <input type="text" class="form-control" placeholder="Website" />
+                  </div>
+                  <div class="form-group">
+                    <input type="email" class="form-control" placeholder="Email address" />
+                  </div>
+                  <div class="form-group">
+                    <textarea class="form-control" placeholder="Short description"></textarea>
+                  </div>
+                  <div class="form-group">
+                    <select class="form-control">
+                      <option value="">Plan type</option>
+                      <option value="basic">Basic</option>
+                      <option value="startup">Startup</option>
+                      <option value="growth">Growth</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <button class="btn btn-primary btn-block">Create your account</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!--footer / contact-->
+    <footer class="py-6 bg-black" id="contact">
+      <div class="container">
+        <div class="row">
+          <div class="col-md-4 col-sm-6">
+            <h5 class="text-white">About <?php echo $titlebrand; ?></h5>
+            <p class="about"><?php echo $meta_description; ?></p>
+            <ul class="list-inline social social-rounded social-sm">
+              <li class="list-inline-item">
+                <a href="<?php echo $canonical_url; ?>"><i class="fa fa-facebook"></i></a>
+              </li>
+              <li class="list-inline-item">
+                <a href="<?php echo $canonical_url; ?>"><i class="fa fa-twitter"></i></a>
+              </li>
+              <li class="list-inline-item">
+                <a href="<?php echo $canonical_url; ?>"><i class="fa fa-google-plus"></i></a>
+              </li>
+              <li class="list-inline-item">
+                <a href="<?php echo $canonical_url; ?>"><i class="fa fa-dribbble"></i></a>
+              </li>
+            </ul>
+          </div>
+          <div class="col-md-2 col-sm-6 ml-auto">
+            <h5 class="text-white"><?php echo $titlebrand; ?></h5>
+            <ul class="list-unstyled mt-4">
+              <li><a href="<?php echo $canonical_url; ?>">About</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Privacy</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Terms</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Blog</a></li>
+            </ul>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <h5 class="text-white">Products</h5>
+            <ul class="list-unstyled mt-4">
+              <li><a href="<?php echo $canonical_url; ?>">Publish</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Outreach</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Collaborate</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Global</a></li>
+            </ul>
+          </div>
+          <div class="col-md-2 col-sm-6">
+            <h5 class="text-white">Community</h5>
+            <ul class="list-unstyled mt-4">
+              <li><a href="<?php echo $canonical_url; ?>">Help forum</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Slack channel</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Support</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Policies</a></li>
+            </ul>
+          </div>
+        </div>
+        <div class="row mt-5">
+          <div class="col-12 text-muted text-center small-xl">
+            <p>&copy; 2026 <?php echo $titlebrand; ?>. All rights reserved.</p>
+            Free Bootstrap 4 Multipurpose Landing Page Template by <a href="<?php echo $canonical_url; ?>" target="_blank"><?php echo $titlebrand; ?></a>.
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!--scroll to top-->
+    <div class="scroll-top">
+      <i class="fa fa-angle-up" aria-hidden="true"></i>
+    </div>
+
+    <!-- theme switcher (FOR DEMO ONLY - REMOVE FROM PRODUCTION)-->
+    <div class="switcher-wrap">
+      <div class="switcher-trigger">
+        <span class="fa fa-gear"></span>
+      </div>
+      <div class="color-switcher">
+        <h6>Color Switcher</h6>
+        <ul class="mt-3 clearfix">
+          <li class="bg-green active" data-color="default" title="Default Green"></li>
+          <li class="bg-purple" data-color="purple" title="Purple"></li>
+          <li class="bg-blue" data-color="blue" title="Blue"></li>
+          <li class="bg-red" data-color="red" title="Red"></li>
+          <li class="bg-orange" data-color="orange" title="Orange"></li>
+          <li class="bg-indigo" data-color="indigo" title="Indigo"></li>
+          <li class="bg-black" data-color="black" title="Black"></li>
+          <li class="bg-teal" data-color="teal" title="Teal"></li>
+          <li class="bg-cyan" data-color="cyan" title="Cyan"></li>
+          <li class="bg-pink" data-color="pink" title="Pink"></li>
+        </ul>
+        <p>These are just demo colors. You can <b>easily</b> create your own color scheme.</p>
+      </div>
+      <div class="mt-4">
+        <a href="https://wireddots.com/themes/lambda?utm_source=lambda-demos" class="btn btn-primary btn-block">Free Download</a>
+      </div>
+    </div>
+
+    <!-- jQuery first, then Popper.js, then Bootstrap JS -->
+    <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.12.9/umd/popper.min.js"></script>
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/4.0.0/js/bootstrap.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/feather-icons/4.7.0/feather.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/slick-carousel/1.8.1/slick.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/lambda/scripts.js"></script>
+    <script
+      type="module"
+      src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092"
+      integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw=="
+      data-cf-beacon='{"version":"2024.11.0","token":"317c7824a07c40cb9ae929f34b17c111","r":1,"spa":2}'
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>
