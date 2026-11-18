@@ -13,7 +13,7 @@ define('SITE_BRAND', $titlebrand);
 ?>
 
 <!doctype html>
-<html ⚡ lang="id">
+<html amp lang="id">
 <head>
     <meta charset="UTF-8">
     <meta content="ie=edge" http-equiv="X-UA-Compatible">
