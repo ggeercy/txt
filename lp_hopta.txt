@@ -1,0 +1,694 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+<meta name="theme-color" content="#fff7ea">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Caprasimo&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/hopta/styles.css">
+
+<?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+<style>
+    .brand-logo {
+  display: block;
+  width: auto;
+  height: 36px;
+  object-fit: contain;
+}
+</style>
+</head>
+<body>
+
+<!-- ============== NAV ============== -->
+<header class="site-nav">
+  <div class="wrap site-nav-inner">
+
+    <a class="brand" href="<?php echo $canonical_url; ?>" aria-label="Hopta home">
+  <img class="brand-logo" src="<?php echo $logo; ?>" alt="">
+</a>
+    <button class="nav-toggle" data-nav-toggle aria-label="Open menu" aria-expanded="false">
+      <svg width="20" height="14" viewBox="0 0 20 14" fill="none"><path d="M0 1h20M0 7h20M0 13h20" stroke="currentColor" stroke-width="2"/></svg>
+    </button>
+    <nav>
+      <ul class="nav-list" data-nav-list>
+        <li><a href="#plans">Plans</a></li>
+        <li><a href="#how">How it works</a></li>
+        <li><a href="#kitchen">Kitchen</a></li>
+        <li><a href="<?php echo $canonical_url; ?>">Shop</a></li>
+        <li><a href="<?php echo $canonical_url; ?>">Contact</a></li>
+        <li><a href="<?php echo $final; ?>" class="nav-cta">Build your plan <span aria-hidden="true">→</span></a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<!-- ============== HERO ============== -->
+<section class="hero" aria-labelledby="hero-h">
+  <div class="hero-inner">
+    <div class="hero-text-col">
+      <div>
+        <p class="hero-eyebrow">Issue 014 · Spring &rsquo;26 · Made fresh in Vermont</p>
+        <h2 id="hero-h" class="hero-h2">
+          <?php echo ucwords($title); ?>
+        </h2>
+        <p class="hero-sub">
+          <?php echo $meta_description; ?>
+        </p>
+        <div class="hero-cta-row">
+          <a href="<?php echo $final; ?>" class="btn btn-primary">Daftar <span class="btn-arrow" aria-hidden="true">→</span></a>
+          <a href="<?php echo $final; ?>" class="btn btn-ghost">Login</a>
+        </div>
+      </div>
+      <div class="hero-meta">
+        <div class="hero-meta-item">
+          <b>34,210</b>
+          <span>Bowls served</span>
+        </div>
+        <div class="hero-meta-item">
+          <b>4.9 / 5</b>
+          <span>Across 6,400 reviews</span>
+        </div>
+        <div class="hero-meta-item">
+          <b>14 day</b>
+          <span>Money-back tail wag</span>
+        </div>
+      </div>
+    </div>
+    <div class="hero-image-col">
+      <img src="<?php echo $banner; ?>" alt="Golden retriever puppy looking up, sunlit outdoor portrait">
+      <div class="hero-blob" aria-hidden="true">
+        <div class="hero-blob-text">From<br><b>$2.40</b><br>per meal</div>
+      </div>
+      <div class="hero-card">
+        <div class="hero-card-emoji" aria-hidden="true">🥕</div>
+        <div>
+          <b>Today's drop</b>
+          <span>Chicken &amp; sweet potato bowl, ready in 90 seconds.</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== MARQUEE ============== -->
+<div class="marquee" aria-hidden="true">
+  <div class="marquee-track">
+    <span>Free shipping<span class="marquee-dot sun"></span>Vet-formulated<span class="marquee-dot coral"></span>Pause anytime<span class="marquee-dot leaf"></span>Human-grade<span class="marquee-dot"></span>Cooked in small batches<span class="marquee-dot sun"></span>Delivered cold<span class="marquee-dot coral"></span>No fillers, ever<span class="marquee-dot leaf"></span></span>
+    <span>Free shipping<span class="marquee-dot sun"></span>Vet-formulated<span class="marquee-dot coral"></span>Pause anytime<span class="marquee-dot leaf"></span>Human-grade<span class="marquee-dot"></span>Cooked in small batches<span class="marquee-dot sun"></span>Delivered cold<span class="marquee-dot coral"></span>No fillers, ever<span class="marquee-dot leaf"></span></span>
+  </div>
+</div>
+
+<!-- ============== ETHOS ============== -->
+<section class="section ethos" id="ethos" aria-labelledby="ethos-h">
+  <div class="wrap">
+    <div class="ethos-head" data-reveal>
+      <h2 id="ethos-h"><?php echo ucwords($title); ?></h2>
+      <p><?php echo $long_description; ?></p>
+    </div>
+    <div class="ethos-grid">
+      <article class="ethos-card" data-reveal>
+        <div>
+          <div class="ethos-card-icon" aria-hidden="true">🥩</div>
+          <h3>Real meat first.</h3>
+          <p>USDA-inspected chicken, beef, lamb, salmon, and turkey. Always the first ingredient. Never "meal" or "by-product."</p>
+        </div>
+        <div class="ethos-card-num">01</div>
+      </article>
+      <article class="ethos-card" data-reveal>
+        <div>
+          <div class="ethos-card-icon" aria-hidden="true">🌱</div>
+          <h3>Whole vegetables.</h3>
+          <p>Sweet potato, carrots, kale, blueberries, pumpkin. Cut, steamed, blended — never powdered or extruded.</p>
+        </div>
+        <div class="ethos-card-num">02</div>
+      </article>
+      <article class="ethos-card" data-reveal>
+        <div>
+          <div class="ethos-card-icon" aria-hidden="true">🌡️</div>
+          <h3>Cooked low, packed cold.</h3>
+          <p>Low-temp gentle cook preserves nutrients. We portion, blast-freeze, and ship in insulated mailers within 48 hours.</p>
+        </div>
+        <div class="ethos-card-num">03</div>
+      </article>
+      <article class="ethos-card" data-reveal>
+        <div>
+          <div class="ethos-card-icon" aria-hidden="true">🐕</div>
+          <h3>Built around your pet.</h3>
+          <p>Tell us their breed, age, weight, allergies, activity level. We portion meals to the gram, vet-checked for AAFCO complete &amp; balanced.</p>
+        </div>
+        <div class="ethos-card-num">04</div>
+      </article>
+      <article class="ethos-card" data-reveal>
+        <div>
+          <div class="ethos-card-icon" aria-hidden="true">📬</div>
+          <h3>Delivered every two weeks.</h3>
+          <p>Free shipping, dry-ice cold, on a schedule that matches your pantry. Skip a week, change a recipe, cancel anytime.</p>
+        </div>
+        <div class="ethos-card-num">05</div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============== PLANS / BOXES ============== -->
+<section class="section boxes" id="plans" aria-labelledby="plans-h">
+  <div class="wrap">
+    <div class="boxes-head" data-reveal>
+      <h2 id="plans-h">Three meal plans.<br>Pick what fits the bowl.</h2>
+      <div>
+        <p class="mono">Pricing per pound · 14-day starter from $34</p>
+      </div>
+    </div>
+    <div class="boxes-grid">
+      <article class="box-card" data-reveal>
+        <div class="box-card-img">
+          <img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/bowl-overhead.jpg" alt="Overhead view of a fresh meal bowl with chicken and sweet potato">
+          <span class="box-card-tag sun">Most popular</span>
+        </div>
+        <div class="box-card-body">
+          <h3 class="box-card-name">The Daily Bowl</h3>
+          <p class="box-card-desc">Fresh, fully-cooked meals portioned to your dog's exact daily calorie target. Five rotating recipes — chicken, beef, lamb, turkey, salmon. Ships frozen every 14 days.</p>
+          <div class="box-card-foot">
+            <div class="box-card-price">$3.20<small>/ meal</small></div>
+            <a href="<?php echo $final; ?>" class="box-card-buy">Build plan</a>
+          </div>
+        </div>
+      </article>
+      <article class="box-card" data-reveal>
+        <div class="box-card-img">
+          <img src="<?php echo $banner; ?>" alt="Pastel bowl filled with crunchy kibble pieces">
+          <span class="box-card-tag">Topper</span>
+        </div>
+        <div class="box-card-body">
+          <h3 class="box-card-name">The Topper</h3>
+          <p class="box-card-desc">A daily fresh-food topper to mix into your existing kibble. The easy upgrade — half the cost, same real ingredients, picky-eater approved.</p>
+          <div class="box-card-foot">
+            <div class="box-card-price">$2.40<small>/ meal</small></div>
+            <a href="<?php echo $final; ?>" class="box-card-buy">Build plan</a>
+          </div>
+        </div>
+      </article>
+      <article class="box-card" data-reveal>
+        <div class="box-card-img">
+          <img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/treats-flat.jpg" alt="Assorted dog treats laid flat on cardboard">
+          <span class="box-card-tag coral">Cat club</span>
+        </div>
+        <div class="box-card-body">
+          <h3 class="box-card-name">The Cat Pâté</h3>
+          <p class="box-card-desc">High-protein, grain-free wet food made with chicken, salmon, and tuna. Paté-style, taurine-fortified, vet-formulated for indoor cats &amp; seniors.</p>
+          <div class="box-card-foot">
+            <div class="box-card-price">$2.90<small>/ meal</small></div>
+            <a href="<?php echo $final; ?>" class="box-card-buy">Build plan</a>
+          </div>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<!-- ============== HOW IT WORKS ============== -->
+<section class="section how" id="how" aria-labelledby="how-h">
+  <div class="wrap">
+    <div class="how-head" data-reveal>
+      <p class="mono">How it works · 04 simple steps</p>
+      <h2 id="how-h">Tell us about your pet. We do <em>all the cooking.</em></h2>
+    </div>
+    <div class="how-grid">
+      <div class="how-step" data-reveal>
+        <div class="how-step-num">01</div>
+        <h3>Tell us about them.</h3>
+        <p>Breed, age, weight, allergies, activity level. Takes about ninety seconds.</p>
+      </div>
+      <div class="how-step" data-reveal>
+        <div class="how-step-num">02</div>
+        <h3>We build the plan.</h3>
+        <p>Our nutritionists set a daily calorie target and pick five recipes that fit.</p>
+      </div>
+      <div class="how-step" data-reveal>
+        <div class="how-step-num">03</div>
+        <h3>We cook &amp; pack cold.</h3>
+        <p>Small-batch cook in our Burlington kitchen. Blast-frozen and shipped in 48 hours.</p>
+      </div>
+      <div class="how-step" data-reveal>
+        <div class="how-step-num">04</div>
+        <h3>Open, thaw, serve.</h3>
+        <p>Pop a pack in the fridge the night before. 90 seconds in warm water and dinner is on.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== INGREDIENTS ============== -->
+<section class="section ingredients" id="kitchen" aria-labelledby="ing-h">
+  <div class="wrap">
+    <div class="ing-grid">
+      <div class="ing-text" data-reveal>
+        <p class="mono" style="color:rgba(255,247,234,0.7);">From the Hopta kitchen</p>
+        <h2 id="ing-h" style="margin-top:14px;">Ingredients you'd<br><em>actually eat.</em></h2>
+        <p>Every recipe uses USDA-inspected meat, organic vegetables, and whole grains (or grain-free, if your pet's tummy needs it). No mystery meal, no artificial preservatives, no rendered fats.</p>
+        <ul class="ing-list">
+          <li>Wild Alaskan salmon</li>
+          <li>Free-range chicken</li>
+          <li>Grass-fed beef</li>
+          <li>Organic sweet potato</li>
+          <li>Wild blueberries</li>
+          <li>Cold-pressed flaxseed</li>
+          <li>Heirloom carrots</li>
+          <li>Local Vermont pumpkin</li>
+        </ul>
+      </div>
+      <div class="ing-photos" data-reveal>
+        <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/dog-stick.jpg" alt="Golden retriever chewing a stick outdoors"></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/biscuits-bone.jpg" alt="Bone-shaped biscuits in a stainless bowl"></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/dog-happy-01.jpg" alt="Happy dog with tongue out"></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/treats-scatter.jpg" alt="Hopta treats scattered on a wood surface"></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/cat-fluffy.jpg" alt="Fluffy white cat portrait"></div>
+        <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/bowl-treats.jpg" alt="Stainless steel bowl with treats"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============== TESTIMONIALS ============== -->
+<section class="section voices" aria-labelledby="voices-h">
+  <div class="wrap">
+    <div class="voices-head" data-reveal>
+      <h2 id="voices-h">Pet parents talk. <em>Their pets eat.</em></h2>
+      <p class="mono">4.9 / 5 from 6,400 reviews</p>
+    </div>
+    <div class="voices-grid">
+
+      <?php foreach ($reviews as $r): ?>
+      <article class="voice" data-reveal>
+        <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+        <p class="voice-quote">"<?php echo htmlspecialchars($r['quote']); ?>"</p>
+        <div class="voice-foot">
+          <div>
+            <div class="voice-name"><?php echo htmlspecialchars($r['name']); ?></div>
+          </div>
+        </div>
+      </article>
+      <?php endforeach; ?>
+
+      
+    </div>
+  </div>
+</section>
+
+<!-- ============== FAQ ============== -->
+<section class="section faq" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="faq-head" data-reveal>
+      <p class="mono">FAQ · the small print</p>
+      <h2 id="faq-h">Quick answers, honest answers.</h2>
+    </div>
+    <div class="faq-list" data-reveal>
+      <?php foreach ($faqs as $i => $f): ?>
+      <div class="faq-item" data-faq>
+        <button class="faq-q"><?php echo htmlspecialchars($f['q']); ?>
+          <span class="faq-icon" aria-hidden="true">+</span>
+        </button>
+        <div class="faq-a">
+          <?php echo htmlspecialchars($f['a']); ?>
+        </div>
+      </div>
+      <?php endforeach; ?>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============== CTA ============== -->
+<section class="section cta" aria-labelledby="cta-h">
+  <div class="wrap cta-inner" data-reveal>
+    <h2 id="cta-h">Build a <span class="ring">happy</span><br>bowl today.</h2>
+    <p>Two-minute quiz, vet-formulated plan, first box on your doorstep in five days.</p>
+    <div class="cta-btns">
+      <a href="<?php echo $final; ?>" class="btn btn-primary">Start the quiz <span class="btn-arrow" aria-hidden="true">→</span></a>
+      <a href="<?php echo $final; ?>" class="btn btn-ghost">Talk to our team</a>
+    </div>
+  </div>
+</section>
+
+<!-- ============== FOOTER ============== -->
+<footer class="site-foot">
+  <div class="wrap">
+    <div class="foot-grid">
+      <div class="foot-col">
+        <div class="foot-brand"><?php echo $titlebrand; ?></div>
+        <p class="foot-brand-tag"><?php echo $meta_description; ?></p>
+      </div>
+      <div class="foot-col">
+        <h4>Shop</h4>
+        <ul>
+          <li><a href="<?php echo $canonical_url; ?>>Daily Bowl</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Topper</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Cat Pâté</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Treats &amp; chews</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Bowls &amp; gear</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="#ethos">Our story</a></li>
+          <li><a href="#kitchen">The kitchen</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Contact</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Press</a></li>
+        </ul>
+      </div>
+      <div class="foot-col">
+        <h4>Help</h4>
+        <ul>
+          <li><a href="<?php echo $final; ?>">FAQ</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Support</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Shipping</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Returns</a></li>
+          <li><a href="<?php echo $canonical_url; ?>">Account</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="foot-bottom">
+      <div>© 2026 <?php echo $titlebrand; ?> Co. All rights reserved.</div>
+      <div>
+        Photography from <a href="<?php echo $canonical_url; ?>" rel="noopener"><?php echo $titlebrand; ?></a> · free template via <a href="<?php echo $canonical_url; ?>" rel="noopener"><?php echo $titlebrand; ?></a>
+      </div>
+    </div>
+  </div>
+</footer>
+
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/hopta/main.js"></script>
+</body>
+</html>

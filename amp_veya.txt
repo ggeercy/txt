@@ -1,0 +1,131 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta content="ie=edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>">
+    <meta name="robots" content="index, follow">
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>">
+    <meta itemprop="description" content="<?php echo $meta_description; ?>">
+    <meta itemprop="image" content="<?php echo $banner; ?>">
+    <meta property="og:url" content="<?php echo $canonical_url; ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?php echo ucwords($title); ?>">
+    <meta property="og:description" content="<?php echo $meta_description; ?>">
+    <meta property="og:image" content="<?php echo $banner; ?>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>">
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>">
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>">
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>">
+    <meta name="twitter:image" content="<?php echo $banner; ?>">
+    <link rel="canonical" href="<?php echo $canonical_url; ?>">
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16">
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600&family=Homemade+Apple&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#222;font-family:'Noto Serif',Georgia,serif;color:#fff}
+    .wrap{max-width:480px;margin:0 auto}
+    .hero{background:#f0e4e0;color:#111;text-align:center;padding:26px 20px 0;position:relative;overflow:hidden}
+    .logo {
+  width: 160px;
+  height: auto;
+  display: center;
+}
+    .hero h1{font-size:22px;font-weight:600;margin:0 0 10px}
+    .hero p{font-size:11px;font-weight:600;margin:0 0 14px}
+    .btn{display:inline-block;background:#222;color:#fff;text-decoration:none;font-size:7px;padding:8px 22px}
+    .cloud{position:absolute;background:#e5ecf8;border-radius:30px;box-shadow:inset 0 -4px 6px rgba(150,170,210,.4)}
+    .c1{left:-30px;top:40px;width:110px;height:50px}
+    .c2{right:-16px;top:14px;width:110px;height:44px}
+    .c3{left:34px;top:164px;width:100px;height:40px}
+    .c4{right:-20px;top:136px;width:120px;height:46px}
+    .balloon{position:relative;z-index:1;margin-top:10px}
+    .lux{background:#d9d6d6;text-align:center;padding:34px 20px 34px}
+    .kicker{font-size:9px;color:#e08b3c;margin:0 0 8px}
+    .lux h2{font-size:14px;line-height:1.5;font-weight:600;margin:0 0 26px}
+    .cards{display:flex;gap:10px}
+    .card{flex:1;background:#d9d6d6;padding:14px 9px 18px}
+    .card amp-img{margin-bottom:14px}
+    .card .k{font-size:9px;color:#e08b3c;margin:0 0 8px}
+    .card p{font-size:9px;line-height:1.5;margin:0 0 14px}
+    .card a{font-size:9px;color:#e08b3c;text-decoration:underline}
+    .last{background:#d9d6d6;text-align:center;padding:34px 20px 40px}
+    .last h2{font-size:14px;line-height:1.5;font-weight:600;margin:0}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="hero">
+      <span class="cloud c1"></span><span class="cloud c2"></span><span class="cloud c3"></span><span class="cloud c4"></span>
+      <div><img class="logo" src="<?php echo $logo; ?>" alt="<?php echo $titlebrand; ?>"><div>
+      <h2><?php echo ucwords($title); ?></h2>
+      <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+      <a class="btn" href="<?php echo $final; ?>">Login</a>
+      <p><?php echo $meta_description; ?></p>
+      
+<div class="balloon">
+  <a href="<?php echo $final; ?>" aria-label="Open banner link">
+    <amp-img
+      src="<?php echo $banner; ?>"
+      width="440"
+      height="330"
+      layout="responsive"
+      alt="Couple in a heart-shaped hot air balloon">
+    </amp-img>
+  </a>
+</div>
+
+    </div>
+    <div class="lux">
+      <p class="kicker">Jewellery</p>
+      <h2>A touch of luxury and romance for your Valentine.</h2>
+      <div class="cards">
+        <div class="card">
+          <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/veya/yellow.jpg" width="90" height="100" layout="responsive" alt="Gold and diamond ring"></amp-img>
+          <p class="k">Diamond Rings</p>
+          <p>Truly boosts to your shared love story.</p>
+          <a href="<?php echo $final; ?>">Shop Gifts</a>
+        </div>
+        <div class="card">
+          <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/veya/images.jpg" width="90" height="100" layout="responsive" alt="Gold drop earring"></amp-img>
+          <p class="k">Earrings</p>
+          <p>Truly boosts to your shared love story.</p>
+          <a href="<?php echo $final; ?>">Shop Gifts</a>
+        </div>
+        <div class="card">
+          <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/veya/OriginsProductCard-5.jpg" width="90" height="100" layout="responsive" alt="Gold necklace with a red pendant"></amp-img>
+          <p class="k">Necklaces</p>
+          <p>Truly boosts to your shared love story.</p>
+          <a href="<?php echo $final; ?>">Shop Gifts</a>
+        </div>
+      </div>
+    </div>
+    <div class="last">
+      <p class="kicker">Jewellery</p>
+      <h2>A Touch Of Luxury And Romance For Your Valentine.</h2>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,760 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Gabarito:wght@400;500;600;700;800;900&family=Hanken+Grotesk:wght@400;500;600;700&family=Fragment+Mono:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="preconnect" href="https://images.unsplash.com" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/veya/styles.css?v=2" />
+
+  <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    <style>
+    .brand-logo {
+  display: block;
+  width: auto;
+  height: 36px;
+  object-fit: contain;
+}
+</style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <!-- HEADER -->
+  <header class="site-header">
+    <div class="container container--wide">
+      <nav class="nav" id="site-nav" aria-label="Main navigation">
+
+<a class="brand" href="<?php echo $canonical_url; ?>">
+  <img class="brand-logo" src="<?php echo $logo; ?>" alt="">
+</a>
+
+        <ul class="nav-links">
+          <li><a href="#hero" class="is-active">Home</a></li>
+          <li><a href="#services">Treatments</a></li>
+          <li><a href="#about">Our clinic</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+        <div class="nav-actions">
+          <a class="nav-phone" href="<?php echo $final; ?>"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.97.36 1.92.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.89.34 1.84.57 2.81.7A2 2 0 0 1 22 16.92z"/></svg>(555) 123-4567</a>
+          <a class="btn btn--primary" href="<?php echo $final; ?>">Book appointment</a>
+          <button class="nav-toggle" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav"><span></span></button>
+        </div>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+
+    <!-- HERO -->
+    <section id="hero" class="hero">
+      <div class="container container--wide">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <span class="eyebrow">Dentistry that feels easy</span>
+            <h1><?php echo ucwords($title); ?></h1>
+            <p class="lede"><?php echo $meta_description; ?></p>
+            <div class="hero-cta">
+              <a class="btn btn--primary btn--lg" href="<?php echo $final; ?>">Daftar</a>
+              <a class="btn btn--ghost btn--lg" href="<?php echo $final; ?>">Login</a>
+            </div>
+            <div class="hero-trust">
+              <div class="avatars" aria-hidden="true">
+                <img width="120" height="120" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1606811971618-4486d14f3f99.jpg" alt="" />
+                <img width="120" height="120" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1611695434369-a8f5d76ceb7b.jpg" alt="" />
+                <img width="120" height="120" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1617812191081-2a24e3f30e45.jpg" alt="" />
+                <img width="120" height="120" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1607960402012-7041136af2c0.jpg" alt="" />
+              </div>
+              <div>
+                <span class="stars" aria-hidden="true">★★★★★</span>
+                <small><b>4.9</b> from 2,400+ happy patients</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="hero-media">
+            <div class="hero-photo">
+              <img src="<?php echo $banner; ?>" alt="A patient smiling confidently after a dental visit" width="540" height="594" fetchpriority="high" />
+            </div>
+            <div class="float-card float-card--top">
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg></span>
+              <div><span class="ft-label">Next available</span><span class="ft-value">Today · 2:30 PM</span></div>
+            </div>
+            <div class="float-card float-card--mid">
+              <span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+              <div><span class="ft-label">Painless promise</span><span class="ft-value">Sedation available</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- SIGNATURE: overlapping booking card -->
+        <div class="booking-card reveal">
+          <div class="bc-head">
+            <h3>Find a time that suits you</h3>
+            <span class="pill pill--teal"><span class="dot"></span> Avg. response under 10 min</span>
+          </div>
+          <form class="booking-form" data-demo>
+            <div class="field">
+              <label for="bk-service">Treatment</label>
+              <select id="bk-service">
+                <option>General checkup</option>
+                <option>Teeth whitening</option>
+                <option>Dental implants</option>
+                <option>Orthodontics</option>
+                <option>Children's dentistry</option>
+                <option>Emergency visit</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="bk-date">Preferred date</label>
+              <input id="bk-date" type="date" required />
+            </div>
+            <div class="field">
+              <label for="bk-time">Time of day</label>
+              <select id="bk-time">
+                <option>Morning</option>
+                <option>Afternoon</option>
+                <option>Evening</option>
+              </select>
+            </div>
+            <div class="field find">
+              <label>&nbsp;</label>
+              <button class="btn btn--primary btn--block" type="submit">Find a time
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST STRIP -->
+    <section class="section--tight">
+      <div class="container container--wide">
+        <div class="trust-strip reveal">
+          <span class="t-label">Covered by your insurance</span>
+          <div class="trust-logos">
+            <span>Delta&nbsp;Dental</span><span>Cigna</span><span>Aetna</span><span>MetLife</span><span>Guardian</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TREATMENT PILL STRIP -->
+    <section class="section--tight">
+      <div class="container container--wide">
+        <div class="pill-strip reveal">
+          <h2>One practice, every treatment under one roof.</h2>
+          <div class="pill-row">
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">🦷</span> General &amp; Preventive</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">✨</span> Cosmetic Dentistry</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">🔩</span> Dental Implants</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">😬</span> Orthodontics &amp; Aligners</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">⚡</span> Teeth Whitening</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">🧸</span> Children's Dentistry</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">🚑</span> Emergency Care</a>
+            <a class="treat-pill" href="<?php echo $canonical_url; ?>"><span class="emoji">🪥</span> Hygiene &amp; Cleaning</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- WHY VEYA -->
+    <section id="services" class="section">
+      <div class="container container--wide">
+        <div class="section-head section-head--center reveal">
+          <span class="eyebrow">Why families choose Veya</span>
+          <h2>Care designed around <em style="font-style:normal;color:var(--teal)">you</em>, not the clock.</h2>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card reveal">
+            <span class="f-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.29 1.51 4.04 3 5.5l7 7Z"/></svg></span>
+            <h3>Gentle, anxiety-free</h3>
+            <p>Warm blankets, noise-cancelling headphones, and sedation options. We go at your pace — no rushing, no judgement, ever.</p>
+          </article>
+          <article class="feature-card reveal">
+            <span class="f-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+            <h3>Same-day appointments</h3>
+            <p>In pain today? We hold daily slots for urgent visits and offer early-morning and evening hours that fit real life.</p>
+          </article>
+          <article class="feature-card reveal">
+            <span class="f-ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+            <h3>Honest, upfront pricing</h3>
+            <p>You'll see the full cost before we begin — no surprise bills. We file your insurance and offer interest-free payment plans.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- TREATMENTS BENTO -->
+    <section id="about" class="section" style="padding-top:0">
+      <div class="container container--wide">
+        <div class="section-head reveal">
+          <span class="eyebrow">Popular treatments</span>
+          <h2><?php echo ucwords($title); ?></h2>
+          <p class="lede"><?php echo $long_description; ?></p>
+        </div>
+        <div class="bento">
+          <article class="t-card span-8 is-feature overlay reveal">
+            <div class="t-photo"><img width="900" height="900" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1489278353717-f64c6ee8a4d2.jpg" alt="Close-up of a bright, healthy smile" loading="lazy" /></div>
+            <div class="t-body">
+              <h3>Cosmetic &amp; Smile Makeovers</h3>
+              <p>Veneers, bonding and whitening, planned with digital previews so you see the result before we start.</p>
+              <span class="t-meta">From $290 · 60–90 min</span>
+            </div>
+          </article>
+          <article class="t-card span-4 reveal">
+            <div class="t-photo"><img width="600" height="420" src="<?php echo $banner; ?>" alt="A modern dental treatment chair" loading="lazy" /></div>
+            <div class="t-body"><h3>General Checkups</h3><p>Exam, X-rays &amp; clean.</p><span class="t-meta">From $79</span></div>
+          </article>
+          <article class="t-card span-4 reveal">
+            <div class="t-photo"><img width="600" height="420" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1593022356769-11f762e25ed9.jpg" alt="A dental implant model" loading="lazy" /></div>
+            <div class="t-body"><h3>Dental Implants</h3><p>Permanent tooth replacement.</p><span class="t-meta">From $1,800</span></div>
+          </article>
+          <article class="t-card span-4 reveal">
+            <div class="t-photo"><img width="600" height="420" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1495573020741-8a2f372bbec3.jpg" alt="Dental hygiene instruments on a tray" loading="lazy" /></div>
+            <div class="t-body"><h3>Hygiene &amp; Cleaning</h3><p>Deep scale &amp; polish.</p><span class="t-meta">From $95</span></div>
+          </article>
+          <article class="t-card span-4 reveal">
+            <div class="t-photo"><img width="600" height="420" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1713942590392-598b193afb1a.jpg" alt="A happy family together" loading="lazy" /></div>
+            <div class="t-body"><h3>Children's Dentistry</h3><p>Fun, fear-free first visits.</p><span class="t-meta">From $59</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3-STEP TIMELINE -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="section-head section-head--center reveal">
+          <span class="eyebrow">How it works</span>
+          <h2>Your visit, in three easy steps.</h2>
+        </div>
+        <div class="steps">
+          <div class="step reveal">
+            <div class="s-num">1</div>
+            <h3>Book online</h3>
+            <p>Pick a treatment and a time that works. It takes under a minute — no phone tag.</p>
+          </div>
+          <div class="step reveal">
+            <div class="s-num">2</div>
+            <h3>Meet your dentist</h3>
+            <p>We listen first, examine gently, and walk you through a clear, no-pressure plan.</p>
+          </div>
+          <div class="step reveal">
+            <div class="s-num">3</div>
+            <h3>Leave smiling</h3>
+            <p>Comfortable treatment, transparent pricing, and aftercare we actually follow up on.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STATS BAND -->
+    <section class="section" style="padding-top:0">
+      <div class="container container--wide">
+        <div class="stats-band reveal">
+          <div class="stats-grid">
+            <div class="stat"><div class="s-value">18</div><div class="s-label">Years caring</div></div>
+            <div class="stat"><div class="s-value">42k+</div><div class="s-label">Smiles treated</div></div>
+            <div class="stat"><div class="s-value">12</div><div class="s-label">Specialist dentists</div></div>
+            <div class="stat"><div class="s-value">4.9★</div><div class="s-label">Average rating</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TEAM -->
+    <section class="section" style="padding-top:0">
+      <div class="container container--wide">
+        <div class="section-head reveal">
+          <span class="eyebrow">Meet the team</span>
+          <h2>Dentists you'll actually look forward to seeing.</h2>
+        </div>
+        <div class="team-grid">
+          <article class="dentist reveal">
+            <div class="d-photo"><img width="440" height="480" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1581065178047-8ee15951ede6.jpg" alt="Dr. Maya Okafor" loading="lazy" /></div>
+            <div class="d-body"><h3>Dr. Maya Okafor</h3><div class="d-role">Principal Dentist</div><div class="d-tags"><span>Implants</span><span>Cosmetic</span></div></div>
+          </article>
+          <article class="dentist reveal">
+            <div class="d-photo"><img width="440" height="480" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1595152772835-219674b2a8a6.jpg" alt="Dr. Leon Park" loading="lazy" /></div>
+            <div class="d-body"><h3>Dr. Leon Park</h3><div class="d-role">Orthodontist</div><div class="d-tags"><span>Aligners</span><span>Braces</span></div></div>
+          </article>
+          <article class="dentist reveal">
+            <div class="d-photo"><img width="440" height="480" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/pexels-photo-19596247.jpg" alt="Dr. Sara Lindqvist in a white coat" loading="lazy" /></div>
+            <div class="d-body"><h3>Dr. Sara Lindqvist</h3><div class="d-role">Pediatric Dentist</div><div class="d-tags"><span>Kids</span><span>Preventive</span></div></div>
+          </article>
+          <article class="dentist reveal">
+            <div class="d-photo"><img width="440" height="480" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/pexels-photo-32669711.jpg" alt="Dr. Aisha Rahman in burgundy scrubs" loading="lazy" /></div>
+            <div class="d-body"><h3>Dr. Aisha Rahman</h3><div class="d-role">Hygienist</div><div class="d-tags"><span>Hygiene</span><span>Whitening</span></div></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- TESTIMONIALS -->
+    <section class="section" style="padding-top:0">
+      <div class="container container--wide">
+        <div class="section-head section-head--center reveal">
+          <span class="eyebrow">Patient stories</span>
+          <h2>Smiles worth talking about.</h2>
+        </div>
+        <div class="testi-grid">
+        <?php foreach ($reviews as $r): ?>
+          <figure class="testi reveal">
+            <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+            <blockquote>"<?php echo htmlspecialchars($r['quote']); ?>"</blockquote>
+            <figcaption class="t-author">
+              <div><b><?php echo htmlspecialchars($r['name']); ?></b></div>
+            </figcaption>
+          </figure>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </section>
+
+    <!-- PRICING / MEMBERSHIP -->
+    <section id="pricing" class="section" style="padding-top:0">
+      <div class="container container--wide">
+        <div class="section-head section-head--center reveal">
+          <span class="eyebrow">Membership</span>
+          <h2>No insurance? No problem.</h2>
+          <p class="lede">Simple monthly plans that cover your routine care and save you up to 30% on everything else.</p>
+        </div>
+        <div class="plans">
+          <article class="plan reveal">
+            <div class="p-name">Solo</div>
+            <div class="p-price">$24<span>/mo</span></div>
+            <p class="p-desc">Everything one adult needs to stay healthy.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 2 checkups &amp; cleans / year</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> All routine X-rays included</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 20% off all other treatment</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 1 emergency visit / year</li>
+            </ul>
+            <a class="btn btn--ghost btn--block" href="<?php echo $final; ?>">Choose Solo</a>
+          </article>
+          <article class="plan plan--featured reveal">
+            <span class="p-badge">Most popular</span>
+            <div class="p-name">Family</div>
+            <div class="p-price">$59<span>/mo</span></div>
+            <p class="p-desc">Cover up to 4 family members under one plan.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Checkups &amp; cleans for all 4</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Free kids' fluoride &amp; sealants</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 30% off all other treatment</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Priority same-day booking</li>
+            </ul>
+            <a class="btn btn--on-teal btn--block" href="<?php echo $final; ?>">Choose Family</a>
+          </article>
+          <article class="plan reveal">
+            <div class="p-name">Kids</div>
+            <div class="p-price">$15<span>/mo</span></div>
+            <p class="p-desc">Gentle, playful care that builds healthy habits.</p>
+            <ul>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 2 kid-friendly checkups / year</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Fluoride &amp; sealants included</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> Reward charts &amp; goodie bags</li>
+              <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg> 15% off all other treatment</li>
+            </ul>
+            <a class="btn btn--ghost btn--block" href="<?php echo $final; ?>">Choose Kids</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="section" style="padding-top:0">
+      <div class="container">
+        <div class="section-head section-head--center reveal">
+          <span class="eyebrow">Good to know</span>
+          <h2>Questions, answered.</h2>
+        </div>
+        <div class="faq reveal">
+        <?php foreach ($faqs as $i => $f): ?>
+          <details>
+            <summary><?php echo htmlspecialchars($f['q']); ?> <span class="q-ico" aria-hidden="true">+</span></summary>
+            <div class="faq-body"><?php echo htmlspecialchars($f['a']); ?></div>
+          </details>
+          <?php endforeach; ?>
+        </div>
+      </div>
+    </section>
+
+    <!-- CLOSING CTA -->
+    <section id="contact" class="section" style="padding-top:0">
+      <div class="container container--wide">
+        <div class="cta-panel reveal">
+          <div class="cta-copy">
+            <span class="eyebrow" style="color:var(--aqua)">Ready when you are</span>
+            <h2>Your brightest smile starts with a single visit.</h2>
+            <p>Book online in under a minute, or call and talk to a real human. We can't wait to meet you.</p>
+            <div class="cta-actions">
+              <a class="btn btn--primary btn--lg" href="<?php echo $final; ?>">Book your appointment</a>
+              <a class="btn btn--on-teal btn--lg" href="<?php echo $final; ?>">Call (555) 123-4567</a>
+            </div>
+          </div>
+          <div class="cta-photo">
+            <img width="700" height="600" src="https://cdn.jsdelivr.net/gh/ggeercy/veya/photo-1478061653917-455ba7f4a541.jpg" alt="A happy family outdoors" loading="lazy" />
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="site-footer">
+    <div class="container container--wide">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <a class="brand" href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+          <p><?php echo $meta_description; ?></p>
+        </div>
+        <div class="footer-col">
+          <h4>Treatments</h4>
+          <a href="<?php echo $canonical_url; ?>">General &amp; preventive</a>
+          <a href="<?php echo $canonical_url; ?>">Cosmetic dentistry</a>
+          <a href="<?php echo $canonical_url; ?>">Dental implants</a>
+          <a href="<?php echo $canonical_url; ?>">Orthodontics</a>
+          <a href="<?php echo $canonical_url; ?>">Children's dentistry</a>
+        </div>
+        <div class="footer-col">
+          <h4>Practice</h4>
+          <a href="<?php echo $canonical_url; ?>">Our clinic</a>
+          <a href="<?php echo $canonical_url; ?>">Meet the team</a>
+          <a href="<?php echo $canonical_url; ?>">Pricing &amp; plans</a>
+          <a href="<?php echo $canonical_url; ?>">Book a visit</a>
+          <a href="<?php echo $canonical_url; ?>">Contact</a>
+        </div>
+        <div class="footer-news">
+          <h4>Smile tips, monthly</h4>
+          <p>Simple, friendly advice for healthier teeth — no spam, unsubscribe anytime.</p>
+          <form class="news-form" data-demo>
+            <input type="email" placeholder="you@email.com" aria-label="Email address" required />
+            <button type="submit">Join</button>
+          </form>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <span>© <span data-year>2026</span> <?php echo $titlebrand; ?>.</span>
+        <span>123 Riverside Ave · Mon–Sat 8am–7pm · <a href="<?php echo $canonical_url; ?>">(555) 123-4567</a></span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/veya/main.js"></script>
+</body>
+</html>

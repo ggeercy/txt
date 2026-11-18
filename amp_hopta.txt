@@ -1,0 +1,349 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta content="ie=edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>">
+    <meta name="robots" content="index, follow">
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>">
+    <meta itemprop="description" content="<?php echo $meta_description; ?>">
+    <meta itemprop="image" content="<?php echo $banner; ?>">
+    <meta property="og:url" content="<?php echo $canonical_url; ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?php echo ucwords($title); ?>">
+    <meta property="og:description" content="<?php echo $meta_description; ?>">
+    <meta property="og:image" content="<?php echo $banner; ?>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>">
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>">
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>">
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>">
+    <meta name="twitter:image" content="<?php echo $banner; ?>">
+    <link rel="canonical" href="<?php echo $canonical_url; ?>">
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <style amp-boilerplate>
+    body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}
+    @-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}
+    @-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}
+    @-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}
+    @-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}
+    @keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}
+  </style>
+  <noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+
+  <style amp-custom>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background: #141821;
+      color: #141821;
+      font-family: "Inter", Arial, sans-serif;
+    }
+
+    .page {
+      width: 100%;
+      max-width: 760px;
+      margin: 32px auto;
+      overflow: hidden;
+      background: #b6f24a;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, .25);
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 20px;
+      padding: 20px 28px;
+      background: #fff;
+    }
+
+    .logo {
+      display: block;
+      width: 150px;
+      height: auto;
+    }
+
+    .header-button {
+      display: inline-block;
+      padding: 11px 20px;
+      border: 1px solid #2a8c1c;
+      border-radius: 6px;
+      background: #b6f24a;
+      color: #141821;
+      font-size: 14px;
+      font-weight: 700;
+      text-decoration: none;
+      white-space: nowrap;
+    }
+
+    .fade {
+      height: 54px;
+      background: linear-gradient(#fff, #b6f24a);
+    }
+
+    .content {
+      padding: 28px 32px 56px;
+      text-align: center;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0 31px,
+        rgba(255, 255, 255, .35) 31px 32px
+      );
+    }
+
+    .kicker {
+      margin: 0 0 18px;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 600px;
+      margin: 0 auto 28px;
+      font-size: 42px;
+      font-weight: 600;
+      line-height: 1.12;
+      letter-spacing: -1.5px;
+    }
+
+    .photo {
+      max-width: 520px;
+      margin: 0 auto 28px;
+      overflow: hidden;
+      border-radius: 16px;
+      box-shadow: 0 14px 32px rgba(20, 24, 33, .16);
+    }
+
+    .description {
+      max-width: 520px;
+      margin: 0 auto 28px;
+      font-size: 16px;
+      line-height: 1.75;
+    }
+
+    .primary-button {
+      display: inline-block;
+      margin: 0 0 34px;
+      padding: 15px 26px;
+      border-radius: 7px;
+      background: #141821;
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .download-label {
+      margin: 0 0 12px;
+      font-size: 13px;
+      color: #303729;
+    }
+
+    .stores {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .stores a {
+      display: inline-block;
+      padding: 12px 18px;
+      border-radius: 7px;
+      background: #141821;
+      color: #fff;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+    }
+
+    .brand-panel {
+      padding: 36px 32px 0;
+      background: repeating-linear-gradient(
+        0deg,
+        transparent 0 31px,
+        rgba(255, 255, 255, .35) 31px 32px
+      );
+    }
+
+    .brand-name {
+      margin: 20px 0 0;
+      overflow-wrap: anywhere;
+      color: #fff;
+      font-size: clamp(42px, 12vw, 96px);
+      font-weight: 800;
+      letter-spacing: -4px;
+      line-height: 1;
+    }
+
+    .footer {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding: 28px 32px 32px;
+      font-size: 12px;
+      line-height: 1.8;
+    }
+
+    .footer strong {
+      display: block;
+      margin-bottom: 8px;
+      font-size: 15px;
+    }
+
+    .footer-right {
+      text-align: right;
+    }
+
+    .footer a {
+      color: #141821;
+    }
+
+    @media (max-width: 600px) {
+      .page {
+        margin: 0 auto;
+      }
+
+      .header {
+        padding: 16px 20px;
+      }
+
+      .logo {
+        width: 125px;
+      }
+
+      .content {
+        padding: 24px 20px 44px;
+      }
+
+      h1 {
+        font-size: 34px;
+      }
+
+      .description {
+        font-size: 15px;
+      }
+
+      .brand-panel {
+        padding: 28px 20px 0;
+      }
+
+      .brand-name {
+        letter-spacing: -2px;
+      }
+
+      .footer {
+        padding: 24px 20px 28px;
+        font-size: 11px;
+      }
+    }
+
+    @media (max-width: 380px) {
+      .footer {
+        flex-direction: column;
+      }
+
+      .footer-right {
+        text-align: left;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <main class="page">
+    <header class="header">
+      <amp-img
+        class="logo"
+        src="<?php echo $logo; ?>"
+        width="300"
+        height="80"
+        layout="responsive"
+        alt="<?php echo $titlebrand; ?>">
+      </amp-img>
+
+      <a class="header-button" href="<?php echo $final; ?>">
+        Daftar
+      </a>
+    </header>
+
+    <div class="fade"></div>
+
+    <section class="content">
+      <p class="kicker">Fast. Secure. Powered by AI</p>
+      <h1>Welcome — Confirm Your Email</h1>
+
+      <div class="photo">
+        <amp-img
+          src="<?php echo $banner; ?>"
+          width="440"
+          height="330"
+          layout="responsive"
+          alt="Person working on a laptop at a desk">
+        </amp-img>
+      </div>
+
+      <p class="description">
+        <?php echo $meta_description; ?>
+      </p>
+
+      <a class="primary-button" href="<?php echo $final; ?>">
+        Login
+      </a>
+
+      <p class="download-label">Download our apps</p>
+      <div class="stores">
+        <a href="<?php echo $final; ?>">App Store</a>
+        <a href="<?php echo $final; ?>">Google Play</a>
+      </div>
+    </section>
+
+    <section class="brand-panel">
+      <p class="kicker">Fast. Secure. Powered by AI</p>
+      <p class="brand-name"><?php echo $titlebrand; ?></p>
+    </section>
+
+    <footer class="footer">
+      <div>
+        <strong><?php echo $titlebrand; ?></strong>
+        © 2026 <?php echo $titlebrand; ?><br>
+        123 Flow Street, Suite 100<br>
+        Phone: +1 234 567 8910
+      </div>
+
+      <div class="footer-right">
+        <a href="<?php echo $final; ?>">Privacy Policy</a><br>
+        <a href="<?php echo $final; ?>">Unsubscribe</a>
+      </div>
+    </footer>
+  </main>
+</body>
+</html>
