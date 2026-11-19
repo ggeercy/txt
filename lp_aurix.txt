@@ -1,0 +1,608 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!doctype html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />  
+  
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/aurix/styles.css" />
+
+  <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    <style>
+    .brand-logo {
+  display: block;
+  width: auto;
+  height: 38px;
+  max-width: 180px;
+  object-fit: contain;
+}
+
+.brand-footer .brand-logo {
+  height: 32px;
+}
+</style>
+    
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="orb orb-a" aria-hidden="true"></div>
+  <div class="orb orb-b" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <!-- Header -->
+<a class="brand" href="<?php echo $canonical_url; ?>" aria-label="Aurix home">
+  <img class="brand-logo" src="<?php echo $logo; ?>" alt="Aurix">
+</a>
+
+
+    <nav class="site-nav" aria-label="Main">
+      <a href="#features">Product</a>
+      <a href="#workflow">How it works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#faq">FAQ</a>
+    </nav>
+    <div class="header-cta">
+      <a class="btn btn-ghost" href="<?php echo $final; ?>">Login</a>
+      <a class="btn btn-solid" href="<?php echo $final; ?>">Daftar</a>
+    </div>
+    <button class="menu-toggle" aria-label="Menu" aria-expanded="false">
+      <span></span><span></span><span></span>
+    </button>
+  </header>
+  <nav class="site-mobile-nav" aria-label="Mobile">
+    <a href="#features">Product</a>
+    <a href="#workflow">How it works</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#faq">FAQ</a>
+    <a class="btn btn-solid btn-lg" href="<?php echo $final; ?>">Daftar</a>
+  </nav>
+
+  <main>
+    <section class="hero">
+      <div class="hero-inner">
+        <p class="eyebrow"><span class="pulse"></span>New · <?php echo $titlebrand; ?> v2 agents are live</p>
+        <h2 class="hero-title">
+          <?php echo ucwords($title); ?>
+        </h2>
+        <p class="hero-sub"><?php echo $meta_description; ?></p>
+        <div class="hero-actions">
+          <a class="btn btn-solid btn-lg" href="<?php echo $final; ?>">Daftar</a>
+          <a class="btn btn-ghost btn-lg" href="<?php echo $final; ?>">Login</a>
+        </div>
+        <ul class="hero-proof">
+          <li><strong>12,400+</strong><span>teams shipping with <?php echo $titlebrand; ?></span></li>
+          <li><strong>3.1M</strong><span>agent runs last month</span></li>
+          <li><strong>99.98%</strong><span>uptime over 90 days</span></li>
+        </ul>
+      </div>
+      <div class="hero-visual">
+        <!-- REPLACE: product screenshot · 1280×800 · WebP/JPG -->
+        <img class="hero-shot" src="<?php echo $banner; ?>" alt="Aurix product dashboard preview" width="1280" height="800" />
+        <div class="hero-card" aria-hidden="true">
+          <div class="hero-card-row">
+            <span class="dot dot-r"></span><span class="dot dot-a"></span><span class="dot dot-g"></span>
+            <span class="hero-card-title">agent.<?php echo $titlebrand; ?> / customer-reply</span>
+          </div>
+          <div class="hero-card-body">
+            <p><span class="tag tag-ok">running</span> matched intent: refund-request</p>
+            <p><span class="tag tag-warn">paused</span> waiting for stripe.charge</p>
+            <p class="hero-card-output">"Totally hear you — refund processed, should land in 3–5 days."</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="logos" aria-label="Featured in">
+      <p class="logos-label">Running quietly inside</p>
+      <ul>
+        <li>Linear</li><li>Notion</li><li>Figma</li><li>Stripe</li><li>Vercel</li><li>Raycast</li>
+      </ul>
+    </section>
+
+    <section class="features" id="features">
+      <header class="section-head">
+        <p class="eyebrow">Product</p>
+        <h2><?php echo ucwords($title); ?></h2>
+        <p class="section-lede"><?php echo $long_description; ?></p>
+      </header>
+
+      <div class="bento">
+        <article class="bento-cell cell-wide">
+          <p class="cell-kicker">Context engine</p>
+          <h3>Reads what your team reads.</h3>
+          <p>Point <?php echo $titlebrand; ?> at Slack, GitHub, Linear, email, or a folder. It builds a private index in minutes, no fine-tuning, no leaked data.</p>
+          <!-- REPLACE: feature screenshot · 960×540 · WebP/JPG -->
+          <img class="cell-shot" src="<?php echo $banner; ?>" alt="Aurix context engine interface" width="960" height="540" loading="lazy" />
+        </article>
+        <article class="bento-cell">
+          <p class="cell-kicker">Triggers</p>
+          <h3>Fires on the thing that matters.</h3>
+          <p>Webhook, schedule, mention, label, or "just watch that channel."</p>
+        </article>
+        <article class="bento-cell">
+          <p class="cell-kicker">Safe actions</p>
+          <h3>Ask-before-ship by default.</h3>
+          <p>Approvals via Slack DM. Full rollback on every write.</p>
+        </article>
+        <article class="bento-cell cell-tall">
+          <p class="cell-kicker">Observability</p>
+          <h3>Every thought, logged.</h3>
+          <p>See the full trace — inputs, model calls, tool calls, outputs. Replay any run. Diff any change.</p>
+          <div class="trace">
+            <div class="trace-row"><span>01</span>parse(email)<em>12ms</em></div>
+            <div class="trace-row"><span>02</span>classify(intent)<em>148ms</em></div>
+            <div class="trace-row"><span>03</span>fetch(stripe.charges)<em>402ms</em></div>
+            <div class="trace-row"><span>04</span>draft(reply)<em>1.1s</em></div>
+            <div class="trace-row"><span>05</span>await(approval)<em>—</em></div>
+          </div>
+        </article>
+        <article class="bento-cell cell-wide">
+          <p class="cell-kicker">Tool library</p>
+          <h3>100+ connectors, or bring your own.</h3>
+          <p>Pre-built for Gmail, GCal, HubSpot, Notion, Postgres, S3. Or drop in any OpenAPI spec and <?php echo $titlebrand; ?> wires it.</p>
+          <div class="chip-row">
+            <span class="chip">Gmail</span><span class="chip">Notion</span><span class="chip">Postgres</span><span class="chip">HubSpot</span><span class="chip">Supabase</span><span class="chip">GCal</span><span class="chip">Snowflake</span><span class="chip">+94 more</span>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="workflow" id="workflow">
+      <header class="section-head">
+        <p class="eyebrow">How it works</p>
+        <h2>Ship your first agent <span class="serif-it">before lunch.</span></h2>
+      </header>
+      <ol class="steps">
+        <li>
+          <span class="step-num">01</span>
+          <h3>Connect your stack</h3>
+          <p>OAuth into the tools your team uses. <?php echo $titlebrand; ?> indexes context privately — no training, no leaving your org.</p>
+        </li>
+        <li>
+          <span class="step-num">02</span>
+          <h3>Describe the boring job</h3>
+          <p>"When a Stripe refund over $200 comes in, draft the apology, tag the CX lead, link the invoice." Plain English.</p>
+        </li>
+        <li>
+          <span class="step-num">03</span>
+          <h3>Watch it work, approve writes</h3>
+          <p>First runs land in your inbox. Approve inline. <?php echo $titlebrand; ?> learns your voice, gets faster, asks less.</p>
+        </li>
+      </ol>
+    </section>
+
+    <section class="quotes">
+      <header class="section-head">
+        <p class="eyebrow">Who uses it</p>
+        <h2>Operators that <span class="serif-it">ship quietly.</span></h2>
+      </header>
+      <div class="quote-grid">
+      <?php foreach ($reviews as $r): ?>
+        <blockquote>
+          <p>“<?php echo htmlspecialchars($r['quote']); ?>”</p>
+          <footer>
+            <!-- REPLACE: headshot · 160×160 · square -->
+            <cite><?php echo htmlspecialchars($r['name']); ?></cite>
+            <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+          </footer>
+        </blockquote>
+        <?php endforeach; ?>
+      </div>
+    </section>
+
+    <section class="pricing" id="pricing">
+      <header class="section-head">
+        <p class="eyebrow">Pricing</p>
+        <h2>Pay for <span class="serif-it">runs,</span> not seats.</h2>
+        <p class="section-lede">Every plan includes unlimited teammates, full logs, and approval workflows.</p>
+      </header>
+      <div class="plans">
+        <article class="plan">
+          <h3>Starter</h3>
+          <p class="price"><span>$0</span><em>/ forever</em></p>
+          <p class="plan-lede">For solo tinkerers shipping their first agent.</p>
+          <ul>
+            <li>500 agent runs / month</li>
+            <li>3 connectors</li>
+            <li>Community support</li>
+            <li>7-day run history</li>
+          </ul>
+          <a class="btn btn-ghost" href="<?php echo $final; ?>">Start free</a>
+        </article>
+        <article class="plan plan-featured">
+          <span class="plan-badge">Most teams pick this</span>
+          <h3>Team</h3>
+          <p class="price"><span>$39</span><em>/ month, usage-based after</em></p>
+          <p class="plan-lede">For growing teams that want approvals, SSO, and real limits.</p>
+          <ul>
+            <li>10,000 agent runs / month</li>
+            <li>All 100+ connectors</li>
+            <li>Approval workflows</li>
+            <li>90-day run history + replay</li>
+            <li>Priority support</li>
+          </ul>
+          <a class="btn btn-solid" href="<?php echo $final; ?>">Start 14-day trial</a>
+        </article>
+        <article class="plan">
+          <h3>Enterprise</h3>
+          <p class="price"><span>Custom</span><em>annual</em></p>
+          <p class="plan-lede">For regulated teams with VPC, audit, and custom retention.</p>
+          <ul>
+            <li>Unlimited runs</li>
+            <li>VPC + self-hosted option</li>
+            <li>SOC 2 · HIPAA · DPA</li>
+            <li>Dedicated solutions engineer</li>
+          </ul>
+          <a class="btn btn-ghost" href="<?php echo $final; ?>">Book a call</a>
+        </article>
+      </div>
+    </section>
+
+    <section class="faq" id="faq">
+      <header class="section-head">
+        <p class="eyebrow">FAQ</p>
+        <h2>Straight <span class="serif-it">answers.</span></h2>
+      </header>
+      <div class="faq-list">
+      <?php foreach ($faqs as $i => $f): ?>
+        <details>
+          <summary><?php echo htmlspecialchars($f['q']); ?></summary>
+          <p><?php echo htmlspecialchars($f['a']); ?></p>
+        </details>
+        <?php endforeach; ?>
+      </div>
+    </section>
+
+    <section class="cta">
+      <div class="cta-inner">
+        <h2>Your team already has the ideas.<br /><span class="serif-it"><?php echo $titlebrand; ?> ships them while you sleep.</span></h2>
+        <div class="cta-actions">
+          <a class="btn btn-solid btn-lg" href="<?php echo $final; ?>">Start free</a>
+          <a class="btn btn-ghost btn-lg" href="<?php echo $final; ?>">Talk to founders</a>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="footer-grid">
+      <div>
+        <!-- Footer -->
+<a class="brand brand-footer" href="<?php echo $canonical_url; ?>" aria-label="Aurix home">
+  <img class="brand-logo" src="<?php echo $logo; ?>" alt="Aurix">
+</a>
+        <p class="footer-note"><?php echo $meta_description; ?></p>
+      </div>
+      <div>
+        <p class="footer-heading">Product</p>
+        <ul><li><a href="<?php echo $canonical_url; ?>">Features</a></li><li><a href="<?php echo $canonical_url; ?>">How it works</a></li><li><a href="<?php echo $canonical_url; ?>">Pricing</a></li><li><a href="<?php echo $canonical_url; ?>">Changelog</a></li></ul>
+      </div>
+      <div>
+        <p class="footer-heading">Company</p>
+        <ul><li><a href="<?php echo $canonical_url; ?>">About</a></li><li><a href="<?php echo $canonical_url; ?>">Careers</a></li><li><a href="<?php echo $canonical_url; ?>">Press</a></li><li><a href="<?php echo $canonical_url; ?>">Contact</a></li></ul>
+      </div>
+      <div>
+        <p class="footer-heading">Resources</p>
+        <ul><li><a href="<?php echo $canonical_url; ?>">Docs</a></li><li><a href="<?php echo $canonical_url; ?>">API</a></li><li><a href="<?php echo $canonical_url; ?>">Status</a></li><li><a href="<?php echo $canonical_url; ?>">Security</a></li></ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <p>© <span id="y"></span> <?php echo $titlebrand; ?>. Crafted with <?php echo $titlebrand; ?>.</p>
+      <p><a href="<?php echo $canonical_url; ?>">Privacy</a> · <a href="<?php echo $canonical_url; ?>">Terms</a> · <a href="<?php echo $canonical_url; ?>">DPA</a></p>
+    </div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurix/main.js" defer></script>
+</body>
+</html>

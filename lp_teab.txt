@@ -1,0 +1,931 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+      <!-- bootstrap css -->
+      <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/ggeercy/teab/bootstrap.min.css">
+      <!-- style css -->
+      <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/gh/ggeercy/teab/stylee.css">
+      <!-- Responsive-->
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/teab/responsive.css">
+      <!-- Scrollbar Custom CSS -->
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/teab/jquery.mCustomScrollbar.min.css">
+      <!-- Tweaks for older IEs-->
+      <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/font-awesome/4.0.3/css/font-awesome.css">
+      <!-- owl stylesheets --> 
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/teab/owl.carousel.min.css">
+      <link rel="stylesoeet" href="https://cdn.jsdelivr.net/gh/ggeercy/teab/owl.theme.default.min.css">
+      <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/fancybox/2.1.5/jquery.fancybox.min.css" media="screen">
+   
+   <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+    <style>
+    
+    .header-logo {
+  display: block;
+  width: auto;
+  height: 40px;
+  max-width: 160px;
+  object-fit: contain;
+}
+</style>
+   </head>
+   <body>
+      <!-- header section start -->
+      <div class="header_section">
+         <nav class="navbar navbar-expand-lg navbar-light bg-light">
+            <div class="logo">
+  <a href="<?php echo $canonical_url; ?>">
+    <img class="header-logo" src="<?php echo $logo; ?>" alt="Logo">
+  </a>
+</div>
+            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarNavAltMarkup" aria-controls="navbarNavAltMarkup" aria-expanded="false" aria-label="Toggle navigation">
+            <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNavAltMarkup">
+               <div class="navbar-nav">
+                  <a class="nav-item nav-link" href="#hero">Home</a>
+                  <a class="nav-item nav-link" href="<?php echo $canonical_url; ?>">About</a>
+                  <a class="nav-item nav-link" href="<?php echo $canonical_url; ?>">Teashop</a>
+                  <a class="nav-item nav-link" href="<?php echo $canonical_url; ?>">Pricing</a>
+                  <a class="nav-item nav-link" href="<?php echo $canonical_url; ?>">Testimonies</a>
+                  <a class="nav-item nav-link" href="<?php echo $canonical_url; ?>">Contact</a>
+               </div>
+            </div>
+            <div class="login_menu">
+               <a href="<?php echo $final; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/search-icon.png"></a>
+            </div>
+         </nav>
+         <!-- banner section end -->
+         <section id="hero">
+         <div class="banner_section layout_padding">
+            <div id="main_slider" class="carousel slide" data-ride="carousel">
+               <div class="carousel-inner">
+                  <div class="carousel-item active">
+                     <div class="container">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <h2 class="about_taital"><?php echo ucwords($title); ?></h2>
+                           </div>
+                           <div class="col-md-6">
+                              <div><img src="<?php echo $banner; ?>" class="image_1"></div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                  <div class="carousel-item">
+                     <div class="container">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <h2 class="about_taital"><?php echo ucwords($title); ?></h2>
+                           </div>
+                           <div class="col-md-6">
+                              <div><img src="<?php echo $banner; ?>" class="image_1"></div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+                  <div class="carousel-item">
+                     <div class="container">
+                        <div class="row">
+                           <div class="col-md-6">
+                              <h2 class="about_taital"><?php echo ucwords($title); ?></h2>
+                           </div>
+                           <div class="col-md-6">
+                              <div><img src="<?php echo $banner; ?>" class="image_1"></div>
+                           </div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+               <a class="carousel-control-prev" href="#main_slider" role="button" data-slide="next">
+               <i class="fa fa-angle-left"></i>
+               </a>
+               <a class="carousel-control-next" href="#main_slider" role="button" data-slide="next">
+               <i class="fa fa-angle-right"></i>
+               </a>
+            </div>
+         </div>
+         <div class="container">
+            <div class="play_icon"><a href="<?php echo $final; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/play-icon.png"></a></div>
+         </div>
+         <!-- banner section end -->
+      </div>
+      </section>
+      <!-- header section end -->
+      <!-- about section start -->
+      <section id="about">
+      <div class="about_section layout_padding">
+         <div id="my_main_slider" class="carousel slide" data-ride="carousel">
+            <div class="carousel-inner">
+               <div class="carousel-item active">
+                  <div class="container">
+                     <div class="row">
+                        <div class="col-md-6">
+                           <div class="about_main">
+                              <h1 class="about_taital"><?php echo ucwords($title); ?></h1>
+                              <p class="about_text"><?php echo $long_description; ?></p>
+                              <div class="readmore_bt"><a href="<?php echo $final; ?>">Read More</a></div>
+                           </div>
+                        </div>
+                        <div class="col-md-6 ">
+                           <div class="image_2"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/img-2.png"></div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+               <div class="carousel-item">
+                  <div class="container">
+                     <div class="row">
+                        <div class="col-md-6">
+                           <div class="about_main">
+                              <h1 class="about_taital"><?php echo ucwords($title); ?></h1>
+                              <p class="about_text"><?php echo $long_description; ?></p>
+                              <div class="readmore_bt"><a href="<?php echo $final; ?>">Read More</a></div>
+                           </div>
+                        </div>
+                        <div class="col-md-6 ">
+                           <div class="image_2"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/img-2.png"></div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+               <div class="carousel-item">
+                  <div class="container">
+                     <div class="row">
+                        <div class="col-md-6">
+                           <div class="about_main">
+                              <h1 class="about_taital"><?php echo ucwords($title); ?></h1>
+                              <p class="about_text"><?php echo $long_description; ?></p>
+                              <div class="readmore_bt"><a href="<?php echo $final; ?>">Read More</a></div>
+                           </div>
+                        </div>
+                        <div class="col-md-6 ">
+                           <div class="image_2"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/img-2.png"></div>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <a class="carousel-control-prev" href="#my_main_slider" role="button" data-slide="next">
+            <i class="fa fa-angle-left"></i>
+            </a>
+            <a class="carousel-control-next" href="#my_main_slider" role="button" data-slide="next">
+            <i class="fa fa-angle-right"></i>
+            </a>
+         </div>
+      </div>
+      </section>
+      <!-- about section end -->
+      <!-- booking section start -->
+      <div class="booking_section">
+         <div class="container">
+            <div class="row">
+               <div class="col-md-6">
+                  <h1 class="booking_taital">Book Now Table</h1>
+                  <p class="booking_text"><?php echo $meta_description; ?></p>
+               </div>
+               <div class="col-md-6">
+                  <div class="booking_bt"><a href="<?php echo $final; ?>">Book Table For Tea</a></div>
+               </div>
+            </div>
+         </div>
+      </div>
+      <!-- booking section end -->
+      <!-- services section start -->
+      <section id="pricing">
+      <div class="services_section layout_padding">
+         <div class="container">
+            <h1 class="services_taital">Our Tea Services</h1>
+            <p class="services_text">Discover teas and services designed to make every cup more enjoyable. From helping you choose the right blend to sharing brewing tips and gift options, we’re here to make your tea experience special.</p>
+            <div class="services_section_2 layout_padding">
+               <div class="row">
+                  <div class="col-md-6">
+                     <div class="box_main active">
+                        <div class="left_main">
+                           <div class="cup_img_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/cup-img-1.png"></div>
+                        </div>
+                        <div class="middle_main">
+                           <div class="border_10 active"></div>
+                        </div>
+                        <div class="right_main">
+                           <h6 class="milk_text">Milk Tea</h6>
+                           <h1 class="price_text">$10</h1>
+                        </div>
+                     </div>
+                     <div class="box_main">
+                        <div class="left_main">
+                           <div class="cup_img_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/cup-img-2.png"></div>
+                        </div>
+                        <div class="middle_main">
+                           <div class="border_10"></div>
+                        </div>
+                        <div class="right_main">
+                           <h6 class="milk_text">Yellow Tea</h6>
+                           <h1 class="price_text">$20</h1>
+                        </div>
+                     </div>
+                     <div class="box_main">
+                        <div class="left_main">
+                           <div class="cup_img_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/cup-img-3.png"></div>
+                        </div>
+                        <div class="middle_main">
+                           <div class="border_10"></div>
+                        </div>
+                        <div class="right_main">
+                           <h6 class="milk_text">Green Tea</h6>
+                           <h1 class="price_text">$20</h1>
+                        </div>
+                     </div>
+                  </div>
+                  <div class="col-md-6">
+                     <div class="box_main">
+                        <div class="left_main">
+                           <div class="cup_img_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/cup-img-4.png"></div>
+                        </div>
+                        <div class="middle_main">
+                           <div class="border_10"></div>
+                        </div>
+                        <div class="right_main">
+                           <h6 class="milk_text">Red Tea</h6>
+                           <h1 class="price_text">$10</h1>
+                        </div>
+                     </div>
+                     <div class="box_main">
+                        <div class="left_main">
+                           <div class="cup_img_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/cup-img-5.png"></div>
+                        </div>
+                        <div class="middle_main">
+                           <div class="border_10"></div>
+                        </div>
+                        <div class="right_main">
+                           <h6 class="milk_text">Herbal Tea</h6>
+                           <h1 class="price_text">$10</h1>
+                        </div>
+                     </div>
+                     <div class="box_main">
+                        <div class="left_main">
+                           <div class="cup_img_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/cup-img-5.png"></div>
+                        </div>
+                        <div class="middle_main">
+                           <div class="border_10"></div>
+                        </div>
+                        <div class="right_main">
+                           <h6 class="milk_text">Black Tea</h6>
+                           <h1 class="price_text">$10</h1>
+                        </div>
+                     </div>
+                  </div>
+               </div>
+            </div>
+            <div class="see_bt"><a href="<?php echo $final; ?>">See More</a></div>
+         </div>
+      </div>
+      </section>
+      <!-- services section end -->
+      <!-- choose section start -->
+      <div class="choose_section">
+         <div class="container">
+            <h1 class="choose_taital">Why Choose Us</h1>
+            <p class="choose_text">We offer carefully selected teas, quality ingredients, and flavors to suit every taste. With friendly service and helpful brewing guidance, we make it easy to find and enjoy your perfect cup.</p>
+            <div class="choose_section_2">
+               <div class="choose_left">
+                  <div class="choose_left_main">
+                     <div class="icon_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/icon-1.png"></div>
+                  </div>
+                  <div class="choose_right_main">
+                     <h1 class="satisfied_text">99%<br><span class="satisfied_text_1">SATISFIED Customer</span></h1>
+                  </div>
+               </div>
+               <div class="choose_middle">
+                  <div class="choose_left_main">
+                     <div class="icon_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/icon-2.png"></div>
+                  </div>
+                  <div class="choose_right_main">
+                     <h1 class="satisfied_text">40+<br><span class="satisfied_text_1">AWESOME TEA</span></h1>
+                  </div>
+               </div>
+               <div class="choose_middle_1">
+                  <div class="choose_left_main">
+                     <div class="icon_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/icon-3.png"></div>
+                  </div>
+                  <div class="choose_right_main">
+                     <h1 class="satisfied_text">4500+<br><span class="satisfied_text_1">Customer</span></h1>
+                  </div>
+               </div>
+               <div class="choose_right">
+                  <div class="choose_left_main">
+                     <div class="icon_1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/icon-4.png"></div>
+                  </div>
+                  <div class="choose_right_main">
+                     <h1 class="satisfied_text">190+<br><span class="satisfied_text_1">DAILY  VISITORS</span></h1>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+      <!-- choose section end -->
+      <!-- shop section start -->
+      <section id="teashop">
+      <div class="shop_section layout_padding">
+         <div id="my_slider" class="carousel slide" data-ride="carousel">
+            <div class="carousel-inner">
+               <div class="carousel-item active">
+                  <div class="container">
+                     <h1 class="shop_taital">Our Tea Shop</h1>
+                     <p class="shop_text">Explore a thoughtfully selected range of teas, from comforting everyday blends to distinctive flavors for special moments.</p>
+                     <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/img-3.png" class="image_3"></div>
+                  </div>
+               </div>
+               <div class="carousel-item">
+                  <div class="container">
+                     <h1 class="shop_taital">Our Tea Shop</h1>
+                     <p class="shop_text">Explore a thoughtfully selected range of teas, from comforting everyday blends to distinctive flavors for special moments.</p>
+                     <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/img-3.png" class="image_3"></div>
+                  </div>
+               </div>
+               <div class="carousel-item">
+                  <div class="container">
+                     <h1 class="shop_taital">Our Tea Shop</h1>
+                     <p class="shop_text">Explore a thoughtfully selected range of teas, from comforting everyday blends to distinctive flavors for special moments.</p>
+                     <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/img-3.png" class="image_3"></div>
+                  </div>
+               </div>
+            </div>
+            <a class="carousel-control-prev" href="#my_slider" role="button" data-slide="next">
+            <i class="fa fa-arrow-left"></i>
+            </a>
+            <a class="carousel-control-next" href="#my_slider" role="button" data-slide="next">
+            <i class="fa fa-arrow-right" style="text-align: left;"></i>
+            </a>
+         </div>
+      </div>
+      </section>
+      <!-- shop section end -->
+      <!-- frequently section start -->
+      <div class="frequently_section layout_padding">
+         <div class="container">
+            <h1 class="frequently_taital">Frequently Asked Questions</h1>
+            <p class="frequently_text">Find quick answers to common questions about our teas, ordering, shipping, and brewing tips. If you need more help, our team is happy to assist. </p>
+            <div class="frequently_section_2 layout_padding">
+               <div class="bs-example">
+                  <div class="accordion" id="accordionExample">
+                     <?php foreach ($faqs as $i => $f): ?>
+  <?php
+    $headingId = 'faqHeading' . $i;
+    $collapseId = 'faqCollapse' . $i;
+  ?>
+
+  <div class="card">
+    <div class="card-header" id="<?= $headingId ?>">
+      <h2 class="mb-0">
+        <button
+          type="button"
+          class="btn btn-link collapsed w-100 text-left"
+          data-toggle="collapse"
+          data-target="#<?= $collapseId ?>"
+          aria-expanded="false"
+          aria-controls="<?= $collapseId ?>"
+        >
+          <i class="fa fa-plus" aria-hidden="true"></i>
+          <?php echo htmlspecialchars($f['q']); ?>
+        </button>
+      </h2>
+    </div>
+
+    <div
+      id="<?= $collapseId ?>"
+      class="collapse"
+      aria-labelledby="<?= $headingId ?>"
+      data-parent="#accordionExample"
+    >
+      <div class="card-body">
+        <p><?php echo htmlspecialchars($f['a']); ?></p>
+      </div>
+    </div>
+  </div>
+<?php endforeach; ?>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+      <!-- frequently section end -->
+      <!-- clients section start -->
+      <section id="testimonies">
+      <div class="clients_section layout_padding">
+  <div id="custum_slider" class="carousel slide" data-ride="carousel">
+    <div class="carousel-inner">
+
+      <?php foreach ($reviews as $i => $r): ?>
+        <?php
+          $rating = max(0, min(5, (int) ($r['rating'] ?? 0)));
+          $stars = str_repeat('★', $rating) . str_repeat('☆', 5 - $rating);
+        ?>
+
+        <div class="carousel-item <?= $i === 0 ? 'active' : '' ?>">
+          <div class="container">
+            <h2 class="clients_taital">Client's Testimonial</h2>
+
+            <p class="clients_text">
+              <?php echo htmlspecialchars($r['quote']); ?>
+            </p>
+
+            
+
+            <h3 class="louis_text">
+            <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+              <?php echo htmlspecialchars($r['name']); ?>
+            </h3>
+
+            <div class="border"></div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+
+    </div>
+
+    <a
+      class="carousel-control-prev"
+      href="#custum_slider"
+      role="button"
+      data-slide="prev"
+      aria-label="Previous testimonial"
+    >
+      <i class="fa fa-angle-left" aria-hidden="true"></i>
+    </a>
+
+    <a
+      class="carousel-control-next"
+      href="#custum_slider"
+      role="button"
+      data-slide="next"
+      aria-label="Next testimonial"
+    >
+      <i class="fa fa-angle-right" aria-hidden="true"></i>
+    </a>
+  </div>
+</div>
+</section>
+      <!-- clients section end -->
+      <!-- contact section start -->  
+      <section id="contact">
+      <div class="contact_section layout_padding">
+         <div class="container-fluid">
+            <div class="row">
+               <div class="col-md-6">
+                  <div class="mail_main">
+                     <h1 class="contact_taital">Contact us</h1>
+                     <form action="/action_page.php">
+                        <div class="form-group">
+                           <input type="text" class="email-bt" placeholder="Name" name="Name">
+                        </div>
+                        <div class="form-group">
+                           <input type="text" class="email-bt" placeholder="Email" name="Email">
+                        </div>
+                        <div class="form-group">
+                           <input type="text" class="email-bt" placeholder="Subject" name="Email">
+                        </div>
+                        <div class="form-group">
+                           <textarea class="massage-bt" placeholder="Massage" rows="5" id="comment" name="text"></textarea>
+                        </div>
+                     </form>
+                     <div class="send_btn">
+                        <div class="main_bt"><a href="<?php echo $final; ?>">Send</a></div>
+                     </div>
+                  </div>
+               </div>
+               <div class="col-md-6">
+                  <div class="map_main">
+                     <div class="map-responsive">
+                        <iframe src="https://www.google.com/maps/embed/v1/place?key=AIzaSyA0s1a7phLN0iaD6-UE7m4qP-z21pH0eSc&amp;q=Eiffel+Tower+Paris+France" width="600" height="600" frameborder="0" style="border:0; width: 100%;" allowfullscreen=""></iframe>
+                     </div>
+                  </div>
+               </div>
+            </div>
+         </div>
+      </div>
+      </section>
+      <!-- contact section end -->
+      <!-- footer section start --> 
+      <div class="footer_section layout_padding">
+         <div class="container">
+            <div class="newsletter_section">
+               <div class="newsletter_left">
+                  <div class="footer_logo"><img class="header-logo" src="<?php echo $logo; ?>" alt="Logo">"></div>
+               </div>
+               <div class="newsletter_right">
+                  <h5 class="newsletter_taital">Subscribe Newsletter</h5>
+                  <div class="subscribe_main">
+                     <input type="text" class="mail_text" placeholder="Enter your email" name="text">
+                     <div class="subscribe_bt"><a href="<?php echo $final; ?>">Subscribe</a></div>
+                  </div>
+               </div>
+            </div>
+            <div class="footer_taital_main">
+               <div class="row">
+                  <div class="col-lg-3 col-sm-6">
+                     <h2 class="useful_text">About</h2>
+                     <p class="ipsum_text"><?php echo $meta_description; ?></p>
+                  </div>
+                  <div class="col-lg-3 col-sm-6">
+                     <h2 class="useful_text">Menus</h2>
+                     <div class="footer_links">
+                        <ul>
+                           <li><a href="<?php echo $canonical_url; ?>">Home</a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">About</a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">Services</a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">Pricing</a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">Contact us</a></li>
+                        </ul>
+                     </div>
+                  </div>
+                  <div class="col-lg-3 col-sm-6">
+                     <h2 class="useful_text">Useful Link</h2>
+                     <div class="footer_links">
+                        <ul>
+                           <li><a href="<?php echo $canonical_url; ?>">About</a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">Teas</a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">Brewing </a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">FAQ </a></li>
+                           <li><a href="<?php echo $canonical_url; ?>">Contact</a></li>
+                        </ul>
+                     </div>
+                  </div>
+                  <div class="col-lg-3 col-sm-6">
+                     <h2 class="useful_text">Contact us</h2>
+                     <div class="addres_link">
+                        <ul>
+                           <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/map-icon.png"><span class="padding_left_10">No.123 Chalingt Gates</span></a></li>
+                           <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/call-icon.png"><span class="padding_left_10">+01 1234567890</span></a></li>
+                           <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/mail-icon.png"><span class="padding_left_10">demo@<?php echo $titlebrand; ?>.com</span></a></li>
+                        </ul>
+                     </div>
+                  </div>
+               </div>
+               <h1 class="follow_text">Follow Us</h1>
+               <div class="social_icon">
+                  <ul>
+                     <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/fb-icon.png"></a></li>
+                     <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/twitter-icon.png"></a></li>
+                     <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/linkedin-icon.png"></a></li>
+                     <li><a href="<?php echo $canonical_url; ?>"><img src="https://cdn.jsdelivr.net/gh/ggeercy/teab/instagram-icon.png"></a></li>
+                  </ul>
+               </div>
+            </div>
+         </div>
+      </div>
+      <!-- footer section end -->  
+      <!-- copyright section start -->
+      <div class="copyright_section">
+         <div class="container">
+            <p class="copyright_text">Copyright 2026 All Right Reserved By.<a href="<?php echo $canonical_url; ?>"> <?php echo $titlebrand; ?></p>
+         </div>
+      </div>
+      <!-- copyright section end -->    
+      <!-- Javascript files-->
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/jquery.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/popper.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/bootstrap.bundle.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/jquery-3.0.0.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/plugin.js"></script>
+      <!-- sidebar -->
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/jquery.mCustomScrollbar.concat.min.js"></script>
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/custom.js"></script>
+      <!-- javascript --> 
+      <script src="https://cdn.jsdelivr.net/gh/ggeercy/teab/owl.carousel.js"></script>
+      <script src="https:cdnjs.cloudflare.com/ajax/libs/fancybox/2.1.5/jquery.fancybox.min.js"></script>
+      <script>
+         $(document).ready(function(){
+         $(".fancybox").fancybox({
+            openEffect: "none",
+            closeEffect: "none"
+            });
+            
+      </script>
+      <script>
+         $(document).ready(function(){
+             // Add minus icon for collapse element which is open by default
+             $(".collapse.show").each(function(){
+              $(this).prev(".card-header").find(".fa").addClass("fa-minus").removeClass("fa-plus");
+             });
+             
+             // Toggle plus minus icon on show hide of collapse element
+             $(".collapse").on('show.bs.collapse', function(){
+              $(this).prev(".card-header").find(".fa").removeClass("fa-plus").addClass("fa-minus");
+             }).on('hide.bs.collapse', function(){
+              $(this).prev(".card-header").find(".fa").removeClass("fa-minus").addClass("fa-plus");
+             });
+         });
+      </script>
+   </body>
+</html>

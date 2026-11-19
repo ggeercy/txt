@@ -1,0 +1,109 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta content="ie=edge" http-equiv="X-UA-Compatible">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>">
+    <meta name="robots" content="index, follow">
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>">
+    <meta itemprop="description" content="<?php echo $meta_description; ?>">
+    <meta itemprop="image" content="<?php echo $banner; ?>">
+    <meta property="og:url" content="<?php echo $canonical_url; ?>">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="<?php echo ucwords($title); ?>">
+    <meta property="og:description" content="<?php echo $meta_description; ?>">
+    <meta property="og:image" content="<?php echo $banner; ?>">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>">
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>">
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>">
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>">
+    <meta name="twitter:image" content="<?php echo $banner; ?>">
+    <link rel="canonical" href="<?php echo $canonical_url; ?>">
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16">
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style>
+  <noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <style amp-custom>
+    *{box-sizing:border-box}body{margin:0;background:#fff;color:#29243f;font-family:Inter,Arial,sans-serif}.wrap{max-width:480px;margin:0 auto;padding:0 0 16px;background:#fff}.browser{text-align:center;font-size:11px;padding:20px 8px 26px;color:#29243f}.brand{height:105px;display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:16px}.brand-mark{position:relative;width:45px;height:45px;border-radius:50%;background:#f7dfe0}.brand-mark:after{content:"";position:absolute;width:39px;height:39px;border-radius:50%;background:#aa9689;left:9px;top:-4px;z-index:0}.brand-mark:before{content:"";position:absolute;z-index:1;width:45px;height:45px;border-radius:50%;background:#f7dfe0;left:0;top:5px}.brand-name{font-size:29px;letter-spacing:-1.5px;font-weight:800;color:#25203d}.brand-name span{color:#d9a9ae}.card{position:relative;min-height:316px;margin:0 10px;background:#f4f2e9;overflow:hidden;padding:34px 26px 28px}.card-copy{position:relative;z-index:2;width:66%;max-width:290px}.card h1{font-family:Georgia,serif;font-size:36px;line-height:1.08;color:#292447;margin:0 0 18px;font-weight:700}.manage{display:block;text-align:center;width:100%;max-width:210px;background:#ad8c7d;border-radius:30px;padding:12px 8px;color:#fff;text-decoration:none;font-size:12px;font-weight:600;margin-bottom:22px}.card h2{font-size:17px;line-height:1.25;margin:0 0 8px;color:#292447}.card p{font-size:12px;line-height:1.55;margin:0;max-width:250px}.bouquet{position:absolute;right:-7px;top:31px;width:48%;height:250px}.footer{margin:0 10px;background:#2c2b40;color:#fff;padding:28px 26px 30px;display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:11px;line-height:1.6}.footer strong{display:block;font-size:12px;margin-bottom:2px}.footer p{margin:0 0 10px}.footer a{color:#fff;text-decoration:none;display:block}.find{font-weight:700;margin:12px 0 8px}.social{display:flex;align-items:center;gap:12px}.social a{display:flex;width:26px;height:26px;align-items:center;justify-content:center;color:#2c2b40;background:#fff;border-radius:50%;font-size:17px;font-weight:700;text-decoration:none}.social a.instagram{background:transparent;border:2px solid #fff;color:#fff;border-radius:7px;width:25px;height:25px;font-size:17px}.social a.x-icon{background:transparent;color:#fff;font-size:21px;font-weight:400}.legal{padding-left:8px}
+    @media(max-width:360px){.card{padding:28px 20px;min-height:300px}.card-copy{width:72%}.card h1{font-size:31px}.bouquet{right:-24px;width:50%;top:46px}.footer{padding:24px 18px;gap:10px;font-size:10px}.brand-name{font-size:26px}}
+ 
+ .brand-logo {
+  width: 180px;
+  height: auto;
+  object-fit: contain;
+}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="brand" aria-label="The Space">
+      <amp-img
+  class="brand-logo"
+  src="<?php echo $logo; ?>"
+  width="260"
+  height="90"
+  layout="intrinsic"
+  alt="<?php echo $titlebrand; ?>">
+</amp-img>
+    </header>
+    <main>
+      <section class="card">
+        <div class="card-copy">
+          <h2><?php echo ucwords($title); ?></h2>
+          <a class="manage" href="<?php echo $final; ?>">Daftar</a>
+          <a class="manage" href="<?php echo $final; ?>">Login</a>
+          <p><?php echo $meta_description; ?></p>
+        </div>
+        <div class="bouquet">
+  <amp-img
+    src="<?php echo $banner; ?>"
+    width="408"
+    height="260"
+    layout="fill"
+    object-fit="contain"
+    alt="Welcome banner">
+  </amp-img>
+</div>
+      </section>
+      <footer class="footer">
+        <div>
+          <strong><?php echo $titlebrand; ?></strong>
+          <p>The Space Studio<br>123 Garden Lane<br>contact@<?php echo $titlebrand; ?>.com</p>
+          <div class="find">Find us</div>
+          <div class="social" aria-label="Social media">
+            <a href="<?php echo $final; ?>" aria-label="Facebook">f</a>
+            <a class="instagram" href="<?php echo $final; ?>" aria-label="Instagram">◎</a>
+            <a class="x-icon" href="<?php echo $final; ?>" aria-label="X">𝕏</a>
+          </div>
+        </div>
+        <nav class="legal" aria-label="Footer links">
+          <a href="<?php echo $final; ?>">Privacy</a>
+          <a href="<?php echo $final; ?>">Imprint</a>
+          <a href="<?php echo $final; ?>">Unsubscribe</a>
+        </nav>
+      </footer>
+    </main>
+  </div>
+</body>
+</html>
