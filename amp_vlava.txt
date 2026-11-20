@@ -1,0 +1,278 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600&family=Montserrat:wght@400;500;600&display=swap" />
+    <style amp-boilerplate>
+      body {
+        -webkit-animation: -amp-start 8s steps(1, end) 0s 1 normal both;
+        -moz-animation: -amp-start 8s steps(1, end) 0s 1 normal both;
+        -ms-animation: -amp-start 8s steps(1, end) 0s 1 normal both;
+        animation: -amp-start 8s steps(1, end) 0s 1 normal both;
+      }
+      @-webkit-keyframes -amp-start {
+        from {
+          visibility: hidden;
+        }
+        to {
+          visibility: visible;
+        }
+      }
+      @-moz-keyframes -amp-start {
+        from {
+          visibility: hidden;
+        }
+        to {
+          visibility: visible;
+        }
+      }
+      @-ms-keyframes -amp-start {
+        from {
+          visibility: hidden;
+        }
+        to {
+          visibility: visible;
+        }
+      }
+      @-o-keyframes -amp-start {
+        from {
+          visibility: hidden;
+        }
+        to {
+          visibility: visible;
+        }
+      }
+      @keyframes -amp-start {
+        from {
+          visibility: hidden;
+        }
+        to {
+          visibility: visible;
+        }
+      }
+    </style>
+    <noscript
+      ><style amp-boilerplate>
+        body {
+          -webkit-animation: none;
+          -moz-animation: none;
+          -ms-animation: none;
+          animation: none;
+        }
+      </style></noscript
+    >
+    <script async src="https://cdn.ampproject.org/v0.js"></script>
+    <style amp-custom>
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: #fff;
+        font-family: 'Montserrat', Arial, sans-serif;
+        color: #1a2238;
+      }
+      .wrap {
+        max-width: 480px;
+        margin: 0 auto;
+        background: #fff;
+        overflow: hidden;
+      }
+      .hero {
+        background: #232c46;
+        position: relative;
+        padding: 0 0 40px;
+        text-align: center;
+      }
+      .hero .smoke {
+        background: linear-gradient(#4a5568, #6b7787 70%, #232c46 100%);
+        height: 150px;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: 0;
+      }
+      .hero .in {
+        position: relative;
+        z-index: 1;
+        padding: 26px 16px 0;
+      }
+      .star {
+        color: #fff;
+        font-size: 18px;
+        margin-bottom: 8px;
+      }
+      .brand {
+        font-family: 'Cinzel', serif;
+        font-weight: 600;
+        font-size: 16px;
+        letter-spacing: 2px;
+        color: #fff;
+        margin: 0 0 6px;
+      }
+      .sub {
+        font-size: 10px;
+        letter-spacing: 2px;
+        text-transform: uppercase;
+        color: #d6dae3;
+        margin: 0 0 20px;
+      }
+      .photo {
+        border-radius: 6px;
+        overflow: hidden;
+        border: 1px solid #cdb89a;
+      }
+      .hero p {
+        font-size: 10px;
+        line-height: 1.8;
+        color: #fff;
+        margin: 28px 30px 22px;
+      }
+      .btn {
+        display: inline-block;
+        background: #f6e7d2;
+        color: #1a2238;
+        text-decoration: none;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 1px;
+        text-transform: uppercase;
+        padding: 10px 24px;
+        border-radius: 16px;
+      }
+      .btn.d {
+        background: #1a2238;
+        color: #fff;
+      }
+      .cheers {
+        text-align: center;
+        padding: 34px 30px 6px;
+      }
+      .cheers h2 {
+        font-size: 12px;
+        font-weight: 500;
+        margin: 0 0 18px;
+      }
+      .cheers p {
+        font-size: 10px;
+        line-height: 1.8;
+        margin: 0;
+      }
+      .collage {
+        position: relative;
+        height: 330px;
+        margin: 20px 0 0;
+      }
+      .collage .main {
+        position: absolute;
+        left: 36px;
+        top: 30px;
+        width: 128px;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .collage .s1 {
+        position: absolute;
+        right: 28px;
+        top: 0;
+        width: 96px;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .collage .s2 {
+        position: absolute;
+        right: 68px;
+        top: 134px;
+        width: 62px;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .leaf {
+        position: absolute;
+        left: -20px;
+        top: 76px;
+        width: 60px;
+        height: 90px;
+        background: #9c9a5a;
+        border-radius: 60% 40% 60% 40%;
+      }
+      .onion {
+        position: absolute;
+        left: 92px;
+        top: 12px;
+        width: 60px;
+        height: 26px;
+        background: #7a1f33;
+        border-radius: 50% 50% 0 0;
+      }
+      .cta {
+        text-align: center;
+        padding: 10px 0 34px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <div class="hero">
+        <div class="smoke"></div>
+        <div class="in">
+          <div class="brand" style="margin-top: 0; text-align: center">
+            <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+          </div>
+          <div class="photo"><amp-img src="<?php echo $banner; ?>" width="320" height="190" layout="responsive" alt="Father and son grilling in the backyard"></amp-img></div>
+          <p><?php echo ucwords($title); ?></p>
+          <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+          <a class="btn" href="<?php echo $final; ?>">Login</a>
+        </div>
+      </div>
+      <div class="cheers">
+        <h2><?php echo ucwords($title); ?></h2>
+        <p><?php echo $meta_description; ?></p>
+      </div>
+      <div class="collage">
+        <span class="leaf"></span><span class="onion"></span>
+        <div class="main"><amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/vlava/1.jpg" width="128" height="190" layout="responsive" alt="Grandfather and boy at a barbecue"></amp-img></div>
+        <div class="s1"><amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/vlava/2.jpg" width="96" height="80" layout="responsive" alt="Family cooking together in a kitchen"></amp-img></div>
+        <div class="s2"><amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/vlava/3.jpg" width="62" height="60" layout="responsive" alt="Two men talking by a grill"></amp-img></div>
+      </div>
+      <div class="cta"><a class="btn d" href="<?php echo $final; ?>">Shop the gift guide</a></div>
+    </div>
+  </body>
+</html>
