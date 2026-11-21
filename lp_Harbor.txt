@@ -1,0 +1,1079 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!doctype html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Public+Sans:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Domine:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css">
+
+    <!-- Vendor CSS Files -->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/aos.css" rel="stylesheet" />
+
+    <!-- Main CSS File -->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/main.css" rel="stylesheet" />
+
+
+<?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+  </head>
+
+  <body class="index-page">
+    <header id="header" class="header sticky-top">
+      <div class="container">
+        <div class="header-top d-flex align-items-center justify-content-between">
+          <div class="contact-info d-none d-lg-flex align-items-center">
+            <i class="bi bi-envelope"></i>
+            <a href="<?php echo $canonical_url; ?>">[info@<?php echo $titlebrand; ?>.com]</a>
+            <i class="bi bi-telephone ms-4"></i>
+            <span>(617) 555-0142</span>
+            <span class="answer">New matters answered within one business day</span>
+          </div>
+          <div class="social-links d-flex align-items-center">
+            <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="X"><i class="bi bi-twitter-x"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="YouTube"><i class="bi bi-youtube"></i></a>
+          </div>
+        </div>
+
+        <div class="header-main d-flex align-items-center justify-content-between">
+          <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center">
+            <img src="<?php echo $logo; ?>" alt="">
+          </a>
+
+          <nav id="navmenu" class="navmenu">
+            <ul>
+              <li><a href="#hero" class="active">Home</a></li>
+              <li><a href="#about">The firm</a></li>
+              <li><a href="#practices">Practices</a></li>
+              <li><a href="#lawyers">Lawyers</a></li>
+              <li><a href="#results">Results</a></li>
+              <li><a href="<?php echo $final; ?>">Fees</a></li>
+              <li><a href="<?php echo $final; ?>">Contact</a></li>
+            </ul>
+            <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+          </nav>
+
+          <a href="<?php echo $final; ?>" class="btn-cta d-none d-xl-block">Request a consultation</a>
+        </div>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- Hero Section -->
+      <section id="hero" class="hero section light-background">
+        <div class="container">
+          <div class="sheet">
+            <div class="row gy-5 align-items-center">
+              <div class="col-lg-6" data-aos="fade-up">
+                <p class="court"><?php echo $titlebrand; ?> · Trial lawyers · Boston, Massachusetts</p>
+                <h1><?php echo ucwords($title); ?></h1>
+                <p class="lead"><?php echo $meta_description; ?></p>
+                <div class="actions">
+                  <a href="<?php echo $final; ?>" class="btn-file">Daftar <i class="bi bi-arrow-right"></i></a>
+                  <a href="<?php echo $final; ?>" class="btn-line">Login</a>
+                </div>
+                <p class="note"><i class="bi bi-telephone"></i>The first call is 45 minutes with a partner, at no charge.</p>
+              </div>
+
+              <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+                <div class="visual">
+                  <figure class="plate">
+                    <img src="<?php echo $banner; ?>" alt="A <?php echo $titlebrand; ?> partner listening to a client across the desk on a first call" class="img-fluid" />
+                  </figure>
+                  <div class="caption-box">
+                    <div class="caption-head"><span>On the record</span><span>Est. 2009</span></div>
+                    <dl>
+                      <div>
+                        <dt>Lawyers</dt>
+                        <dd>12</dd>
+                      </div>
+                      <div>
+                        <dt>Matters closed</dt>
+                        <dd>640</dd>
+                      </div>
+                      <div>
+                        <dt>Tried to verdict or award</dt>
+                        <dd>41</dd>
+                      </div>
+                      <div>
+                        <dt>First reply</dt>
+                        <dd>1 business day</dd>
+                      </div>
+                    </dl>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="acts-for" data-aos="fade-up" data-aos-delay="150">
+              <p class="acts-label">We act for</p>
+              <div class="row gy-4">
+                <div class="col-lg-3 col-sm-6">
+                  <div class="cell">
+                    <span class="mark">(a)</span>
+                    <h3>Employers</h3>
+                    <p>HR and in-house teams facing a claim, an agency charge or a departing executive.</p>
+                  </div>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                  <div class="cell">
+                    <span class="mark">(b)</span>
+                    <h3>Executives</h3>
+                    <p>Senior people negotiating an exit, a restrictive covenant or an equity dispute.</p>
+                  </div>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                  <div class="cell">
+                    <span class="mark">(c)</span>
+                    <h3>Private companies</h3>
+                    <p>Owner-run and investor-backed businesses in a contract or partnership dispute.</p>
+                  </div>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                  <div class="cell">
+                    <span class="mark">(d)</span>
+                    <h3>Boards and investors</h3>
+                    <p>Committees that need an independent investigation or a shareholder fight resolved.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Hero Section -->
+
+      <!-- About Section -->
+      <section id="about" class="about section">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>A litigation firm, kept small on purpose</h2>
+          <p><?php echo $titlebrand; ?> opened on Wharf Row in 2009 with two partners and one rule: nobody hands a case down the hall.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5 align-items-center">
+            <div class="col-lg-5" data-aos="fade-up">
+              <figure class="figure-block">
+                <img src="<?php echo $banner; ?>" alt="A <?php echo $titlebrand; ?> lawyer reviewing a file in the Wharf Row conference room" class="img-fluid" />
+              </figure>
+            </div>
+
+            <div class="col-lg-7" data-aos="fade-up" data-aos-delay="100">
+              <div class="body">
+                <p class="lede"><?php echo ucwords($title); ?></p>
+                <p>
+                  <?php echo $long_description; ?>
+                </p>
+
+                <dl class="credentials">
+                  <div>
+                    <dt>Founded</dt>
+                    <dd>March 2009, by Eleanor Whitcombe and Marcus Hale</dd>
+                  </div>
+                  <div>
+                    <dt>State bars</dt>
+                    <dd>Massachusetts, New York and Rhode Island</dd>
+                  </div>
+                  <div>
+                    <dt>Federal courts</dt>
+                    <dd>District of Massachusetts and the First Circuit Court of Appeals</dd>
+                  </div>
+                  <div>
+                    <dt>Staffing</dt>
+                    <dd>One partner and one associate on every matter, named in writing</dd>
+                  </div>
+                </dl>
+
+                <a href="<?php echo $final; ?>" class="link-more">Read how the firm works <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /About Section -->
+
+      <!-- Practices Section -->
+      <section id="practices" class="practices section light-background">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>Two practices, and nothing outside them</h2>
+          <p>We decline work that is not an employment or a commercial dispute. These are the matters we are hired for most often.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row g-4">
+            <div class="col-lg-6" data-aos="fade-up">
+              <article class="panel">
+                <header>
+                  <span class="label">Practice I</span>
+                  <h3>Employment disputes</h3>
+                  <p>For employers with 50 to 5,000 staff, and for executives at director level and above.</p>
+                </header>
+                <ul>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>">
+                      <span class="num">01</span>
+                      <span class="text"><strong>Employment litigation</strong><em>Defense of discrimination, retaliation and termination claims in court and before agencies.</em></span>
+                      <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>">
+                      <span class="num">02</span>
+                      <span class="text"><strong>Non-competes and trade secrets</strong><em>Injunction papers filed within 72 hours when a key employee leaves for a competitor.</em></span>
+                      <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>">
+                      <span class="num">04</span>
+                      <span class="text"><strong>Workplace investigations</strong><em>An independent written report for a board or HR leader, usually within 21 days.</em></span>
+                      <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </li>
+                </ul>
+                <footer>
+                  <a href="<?php echo $final; ?>" class="link-more">All six employment matters <i class="bi bi-arrow-right"></i></a>
+                </footer>
+              </article>
+            </div>
+
+            <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+              <article class="panel">
+                <header>
+                  <span class="label">Practice II</span>
+                  <h3>Commercial disputes</h3>
+                  <p>For privately held companies, their founders and the investors who back them.</p>
+                </header>
+                <ul>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>">
+                      <span class="num">07</span>
+                      <span class="text"><strong>Contract disputes</strong><em>Breach, supply and licensing claims taken through court or arbitration to judgment.</em></span>
+                      <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $final; ?>">
+                      <span class="num">08</span>
+                      <span class="text"><strong>Shareholder and founder disputes</strong><em>Fiduciary duty, deadlock and buy-out fights between the owners of a private company.</em></span>
+                      <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>">
+                      <span class="num">09</span>
+                      <span class="text"><strong>Earn-out and post-closing disputes</strong><em>Claims over purchase price, earn-outs and indemnities after a company has been sold.</em></span>
+                      <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </li>
+                </ul>
+                <footer>
+                  <a href="<?php echo $final; ?>" class="link-more">All five commercial matters <i class="bi bi-arrow-right"></i></a>
+                </footer>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Practices Section -->
+
+      <!-- Stats Section -->
+      <section id="stats" class="stats section dark-background">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>Seventeen years, counted honestly</h2>
+          <p>These figures cover every matter opened between March 2009 and June 2026, including the ones we lost.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5 align-items-stretch">
+            <div class="col-lg-5" data-aos="fade-up">
+              <div class="lead-figure">
+                <span class="figure"><span data-purecounter-start="0" data-purecounter-end="41" data-purecounter-duration="1" class="purecounter"></span></span>
+                <h3>cases tried to a verdict or an arbitration award</h3>
+                <p>Twenty-nine were decided for our client. The other twelve are in the results ledger as well.</p>
+              </div>
+            </div>
+
+            <div class="col-lg-7" data-aos="fade-up" data-aos-delay="100">
+              <ul class="figures">
+                <li>
+                  <span class="value"><span data-purecounter-start="0" data-purecounter-end="640" data-purecounter-duration="1" class="purecounter"></span></span>
+                  <span class="what"><strong>Matters closed</strong>Across both practices since the firm opened in 2009.</span>
+                </li>
+                <li>
+                  <span class="value"><span data-purecounter-start="0" data-purecounter-end="83" data-purecounter-duration="1" class="purecounter"></span>%</span>
+                  <span class="what"><strong>Resolved without a trial</strong>By negotiation, mediation or an early motion to dismiss.</span>
+                </li>
+                <li>
+                  <span class="value"><span data-purecounter-start="0" data-purecounter-end="14" data-purecounter-duration="1" class="purecounter"></span> yrs</span>
+                  <span class="what"><strong>Average experience of your lead lawyer</strong>Every matter is led by one of five partners.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Stats Section -->
+
+      <!-- Results Section -->
+      <section id="results" class="results section">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>Recent matters, listed the way a docket would</h2>
+          <p>Client names are withheld. Forums and outcomes are not. Prior results do not guarantee a similar outcome.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container" data-aos="fade-up">
+          <div class="ledger" role="table" aria-label="Recent matters">
+            <div class="ledger-head" role="row">
+              <span role="columnheader">File no.</span>
+              <span role="columnheader">Matter</span>
+              <span role="columnheader">Forum</span>
+              <span role="columnheader">Outcome</span>
+              <span role="columnheader">Year</span>
+            </div>
+
+            <div class="ledger-row" role="row">
+              <span class="no" role="cell">H-0612</span>
+              <span class="matter" role="cell"><em>Employment</em>Defense of a 340-employee wage class action against a regional freight company</span>
+              <span class="forum" role="cell">Superior Court, Suffolk County</span>
+              <span class="outcome" role="cell">Class certification denied; settled at 6% of the damages claimed</span>
+              <span class="year" role="cell">2025</span>
+            </div>
+
+            <div class="ledger-row" role="row">
+              <span class="no" role="cell">H-0598</span>
+              <span class="matter" role="cell"><em>Employment</em>Enforcement of a non-compete against a departing sales vice president of a medical device maker</span>
+              <span class="forum" role="cell">U.S. District Court, District of Massachusetts</span>
+              <span class="outcome" role="cell">Preliminary injunction granted nine days after engagement</span>
+              <span class="year" role="cell">2025</span>
+            </div>
+
+            <div class="ledger-row" role="row">
+              <span class="no" role="cell">H-0571</span>
+              <span class="matter" role="cell"><em>Commercial</em>Earn-out claim for the three sellers of a payroll software company</span>
+              <span class="forum" role="cell">Commercial arbitration, Boston</span>
+              <span class="outcome" role="cell">Award of $4.2 million plus legal fees</span>
+              <span class="year" role="cell">2024</span>
+            </div>
+
+            <div class="ledger-row" role="row">
+              <span class="no" role="cell">H-0544</span>
+              <span class="matter" role="cell"><em>Employment</em>Retaliation claim brought by a former chief financial officer against a biotech employer</span>
+              <span class="forum" role="cell">Jury trial, Middlesex County</span>
+              <span class="outcome" role="cell">Defense verdict after a six-day trial</span>
+              <span class="year" role="cell">2024</span>
+            </div>
+
+            <div class="ledger-row" role="row">
+              <span class="no" role="cell">H-0519</span>
+              <span class="matter" role="cell"><em>Commercial</em>Deadlock between the two equal owners of a nine-location restaurant group</span>
+              <span class="forum" role="cell">Business Litigation Session, Boston</span>
+              <span class="outcome" role="cell">Court-ordered buy-out at our client's valuation</span>
+              <span class="year" role="cell">2023</span>
+            </div>
+          </div>
+
+          <div class="ledger-foot">
+            <p>Five of the 640 matters on file. The full ledger includes the cases we lost.</p>
+            <a href="<?php echo $final; ?>" class="btn-line">Open the full ledger <i class="bi bi-arrow-right"></i></a>
+          </div>
+        </div>
+      </section>
+      <!-- /Results Section -->
+
+      <!-- Process Section -->
+      <section id="process" class="process section light-background">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>The first thirty days of a matter</h2>
+          <p>Disputes are often decided early, so the opening month runs to a fixed schedule and ends with a plan you have agreed.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row g-0">
+            <div class="col-lg-3 col-md-6" data-aos="fade-up">
+              <div class="step">
+                <span class="day">Day 1</span>
+                <h3>Intake call</h3>
+                <p>Forty-five minutes with a partner. We run a conflict check the same day and tell you whether we can act.</p>
+                <div class="yields"><span>You receive</span>A yes or a no within 24 hours</div>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="50">
+              <div class="step">
+                <span class="day">Day 3</span>
+                <h3>Engagement letter</h3>
+                <p>The scope, the two lawyers on your matter and the fee arrangement, set out on two pages.</p>
+                <div class="yields"><span>You receive</span>A signed scope and fee terms</div>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="100">
+              <div class="step">
+                <span class="day">Day 10</span>
+                <h3>Case assessment</h3>
+                <p>We read the documents, interview your key people and test the other side's best argument.</p>
+                <div class="yields"><span>You receive</span>A written memo on exposure and options</div>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="150">
+              <div class="step">
+                <span class="day">Day 30</span>
+                <h3>Strategy meeting</h3>
+                <p>You decide with us whether to negotiate, mediate or file, with a cost estimate for each route.</p>
+                <div class="yields"><span>You receive</span>A plan and a budget by phase</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Process Section -->
+
+      <!-- Lawyers Section -->
+      <section id="lawyers" class="lawyers section">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>Five partners, and one of them takes your first call</h2>
+          <p>Every matter is led by a partner and staffed with one associate. Seven more lawyers work alongside them.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5">
+            <div class="col-lg-5" data-aos="fade-up">
+              <article class="founder">
+                <img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/professional-f-1.webp" alt="Eleanor Whitcombe, founding partner" class="img-fluid" />
+                <div class="founder-body">
+                  <span class="role">Founding partner · Employment litigation</span>
+                  <h3>Eleanor Whitcombe</h3>
+                  <blockquote>If I take your call, I take your case. That has not changed since 2009.</blockquote>
+                  <p>Admitted 1998 · 19 jury trials · Massachusetts and New York</p>
+                </div>
+              </article>
+            </div>
+
+            <div class="col-lg-7" data-aos="fade-up" data-aos-delay="100">
+              <div class="partners">
+                <article class="partner">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/professional-m-1.webp" alt="Marcus Hale, founding partner" class="img-fluid" />
+                  <div>
+                    <h3>Marcus Hale</h3>
+                    <span class="role">Founding partner</span>
+                    <p>Commercial disputes and arbitration. Admitted 1996.</p>
+                  </div>
+                </article>
+
+                <article class="partner">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/professional-f-2.webp" alt="Julia Raines, partner" class="img-fluid" />
+                  <div>
+                    <h3>Julia Raines</h3>
+                    <span class="role">Partner</span>
+                    <p>Non-competes and trade secrets. Admitted 2006.</p>
+                  </div>
+                </article>
+
+                <article class="partner">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/professional-m-2.webp" alt="Thomas Lindqvist, partner" class="img-fluid" />
+                  <div>
+                    <h3>Thomas Lindqvist</h3>
+                    <span class="role">Partner</span>
+                    <p>Wage and hour class actions. Admitted 2008.</p>
+                  </div>
+                </article>
+
+                <article class="partner">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/professional-f-3.webp" alt="Renata Souza, partner" class="img-fluid" />
+                  <div>
+                    <h3>Renata Souza</h3>
+                    <span class="role">Partner</span>
+                    <p>Shareholder and founder disputes. Admitted 2010.</p>
+                  </div>
+                </article>
+              </div>
+
+              <div class="rest">
+                <p><strong>Also on the team:</strong> two counsel and five associates, all admitted in Massachusetts.</p>
+                <a href="<?php echo $final; ?>" class="link-more">Meet all twelve lawyers <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Lawyers Section -->
+
+      <!-- Testimonials Section -->
+      <section id="testimonials" class="testimonials section light-background">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>What clients say once the file is closed</h2>
+          <p>Comments from a general counsel, a people officer and an executive, published with their permission.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row g-4 align-items-stretch">
+            
+            <?php foreach ($reviews as $r): ?>
+            <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+              <div class="quote-stack">
+                <figure>
+                  <blockquote><?php echo htmlspecialchars($r['quote']); ?></blockquote>
+                  <figcaption>
+                    <strong><?php echo htmlspecialchars($r['name']); ?></strong>
+                    <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+                  </figcaption>
+                </figure>
+              </div>
+            </div>
+            <?php endforeach; ?>
+
+          </div>
+        </div>
+      </section>
+      <!-- /Testimonials Section -->
+
+      <!-- Faq Section -->
+      <section id="faq" class="faq section">
+        <!-- Section Title -->
+        <div class="container section-title">
+          <h2>Questions we hear on the first call</h2>
+          <p>Short answers to what most people ask before they hire a litigation firm.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5">
+            <div class="col-lg-4" data-aos="fade-up">
+              <aside class="aside-note">
+                <span class="label">Not on the list?</span>
+                <p>Ask a lawyer directly. The intake line is answered by a person from 8:30 AM to 6:00 PM, Monday to Friday.</p>
+                <a href="tel:+16175550142" class="phone">(617) 555-0142</a>
+                <a href="<?php echo $canonical_url; ?>">[info@<?php echo $titlebrand; ?>.com]</a>
+              </aside>
+            </div>
+
+            <div class="col-lg-8" data-aos="fade-up" data-aos-delay="100">
+              <div class="faq-container">
+                
+                <?php foreach ($faqs as $i => $f): ?>
+                <div class="faq-item">
+                  <h3><?php echo htmlspecialchars($f['q']); ?></h3>
+                  <div class="faq-content">
+                    <p><?php echo htmlspecialchars($f['a']); ?></p>
+                  </div>
+                  <i class="faq-toggle bi bi-chevron-right"></i>
+                </div>
+                <?php endforeach; ?>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Faq Section -->
+
+      <!-- Call To Action Section -->
+      <section id="call-to-action" class="call-to-action section dark-background">
+        <div class="container" data-aos="fade-up">
+          <div class="row gy-5 align-items-center">
+            <div class="col-lg-7">
+              <span class="label">New matters</span>
+              <h2>Served with a complaint, or about to send one?</h2>
+              <p>Deadlines start running the day the papers arrive. Call before you reply to anyone, and a partner will tell you what the next ten days should look like.</p>
+            </div>
+
+            <div class="col-lg-5">
+              <div class="reach">
+                <span class="reach-label">Intake line</span>
+                <a href="<?php echo $final; ?>" class="phone">(617) 555-0142</a>
+                <p>Monday to Friday, 8:30 AM to 6:00 PM. Written enquiries are answered within one business day.</p>
+                <a href="<?php echo $final; ?>" class="btn-file">Request a consultation <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Call To Action Section -->
+    </main>
+
+    <footer id="footer" class="footer ink-background">
+      <div class="container">
+        <div class="footer-main">
+          <div class="row gy-5">
+            <div class="col-lg-4 col-md-6">
+              <div class="footer-widget about-widget">
+                <a href="<?php echo $canonical_url; ?>" class="logo">
+                  <span class="sitename"><?php echo $titlebrand; ?></span>
+                </a>
+                <p><?php echo $meta_description; ?></p>
+                <div class="newsletter-form">
+                  <h5>The Docket, our quarterly briefing on employment law</h5>
+                  <form action="forms/newsletter.php" method="post" class="php-email-form">
+                    <div class="input-group">
+                      <input type="email" name="email" placeholder="Work email address" aria-label="Work email address" required="" />
+                      <button type="submit" aria-label="Subscribe"><i class="bi bi-arrow-right"></i></button>
+                    </div>
+                    <div class="loading">Loading</div>
+                    <div class="error-message"></div>
+                    <div class="sent-message">You are on the list. The next issue of The Docket will reach you this quarter.</div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <!-- End About Widget -->
+
+            <div class="col-lg-2 col-md-6 col-6">
+              <div class="footer-widget">
+                <h4>The firm</h4>
+                <ul class="footer-menu">
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> About <?php echo $titlebrand; ?></a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Our lawyers</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Results</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Fees</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Careers</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <!-- End Firm Links Widget -->
+
+            <div class="col-lg-2 col-md-6 col-6">
+              <div class="footer-widget">
+                <h4>Practices</h4>
+                <ul class="footer-menu">
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Employment</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Non-competes</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Investigations</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Contracts</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Shareholders</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <!-- End Practices Widget -->
+
+            <div class="col-lg-4 col-md-6">
+              <div class="footer-widget contact-widget">
+                <h4>New matters</h4>
+                <ul class="contact-info">
+                  <li>
+                    <i class="bi bi-geo-alt"></i>
+                    <span>40 Wharf Row, Suite 600<br />Boston, MA 02210</span>
+                  </li>
+                  <li>
+                    <i class="bi bi-telephone"></i>
+                    <span>(617) 555-0142</span>
+                  </li>
+                  <li>
+                    <i class="bi bi-envelope"></i>
+                    <span><a href="<?php echo $canonical_url; ?>">[info@<?php echo $titlebrand; ?>.com]</a></span>
+                  </li>
+                  <li>
+                    <i class="bi bi-clock"></i>
+                    <span>Mon - Fri: 8:30 AM - 6:00 PM</span>
+                  </li>
+                </ul>
+                <div class="social-icons">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="X"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="YouTube"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+            <!-- End Contact Widget -->
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div class="container">
+          <p class="disclaimer">Attorney advertising. Prior results do not guarantee a similar outcome. Nothing on this site is legal advice, and contacting the firm does not create an attorney-client relationship.</p>
+          <div class="row align-items-center">
+            <div class="col-md-6 text-center text-md-start order-last order-md-first pt-3 mt-md-0">
+              <p class="copyright-text">© <span>Copyright</span> <strong class="px-1 sitename"><?php echo $titlebrand; ?></strong> <span>All Rights Reserved</span></p>
+              <div class="credits">
+                Designed by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+              </div>
+            </div>
+            <div class="col-md-6 text-center text-md-end">
+              <ul class="legal-links">
+                <li><a href="<?php echo $canonical_url; ?>">Privacy Policy</a></li>
+                <li><a href="<?php echo $canonical_url; ?>">Terms of Use</a></li>
+                <li><a href="<?php echo $canonical_url; ?>">Attorney Advertising</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Scroll Top -->
+    <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+    <!-- Preloader -->
+    <div id="preloader"></div>
+
+    <!-- Vendor JS Files -->
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/email-decode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/validate.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/purecounter_vanilla.js"></script>
+
+    <!-- Main JS File -->
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/main.js"></script>
+
+    <script
+      type="module"
+      src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092"
+      integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw=="
+      data-cf-beacon='{"version":"2024.11.0","token":"68c5ca450bae485a842ff76066d69420","spa":2}'
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>

@@ -1,0 +1,114 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fira+Sans:wght@400;500;600;700&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#fff;font-family:'Fira Sans',Arial,sans-serif;color:#111}
+    .wrap{max-width:480px;margin:0 auto;background:#fff}
+    .top{background:#14123f;color:#fff;text-align:center;padding:10px 20px 0}
+    .logo{font-size:20px;font-weight:500;margin-bottom:16px}
+    h1{font-size:21px;line-height:1.35;font-weight:600;margin:0 0 20px}
+    h1 span{color:#5b6cff}
+    .top p{font-size:12px;line-height:1.7;color:#b9bce0;margin:0 40px 18px}
+    .btn{display:inline-block;background:#4a5cf0;color:#fff;text-decoration:none;font-size:12px;font-weight:600;padding:8px 18px;border-radius:14px;margin-bottom:12px}
+    .group{display:block}
+    .proud{background:#fff;text-align:center;padding:30px 20px 24px}
+    .proud h2{font-size:17px;font-weight:700;margin:0 0 22px}
+    .cards{display:flex;gap:12px}
+    .card{flex:1;background:#f6f6f8;border-radius:8px;overflow:hidden;text-align:left;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+    .card .tx{padding:10px 10px 12px}
+    .card h3{font-size:12px;font-weight:700;margin:0 0 8px}
+    .card p{font-size:12px;line-height:1.6;color:#444;margin:0}
+    .quote{background:#14123f;color:#fff;display:flex;align-items:flex-end;gap:12px;padding:20px 0 0 20px;margin-top:14px}
+    .quote .im{flex:0 0 48%}
+    .quote .tx{flex:1;align-self:center;padding:0 24px 24px 0}
+    .quote p{font-size:12px;line-height:1.7;margin:0 0 10px;color:#e1e3f7}
+    .quote small{font-size:12px;color:#9ea2d0}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div class="brand" style="margin-top: 0; text-align: center">
+          <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+        </div>
+      <h1><?php echo ucwords($title); ?></h1>
+      <p><?php echo $meta_description; ?></p>
+      <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+      <a class="btn" href="<?php echo $final; ?>">Login</a>
+      <amp-img class="group" src="<?php echo $banner; ?>" width="440" height="190" layout="responsive" alt="Group of six smiling students"></amp-img>
+    </div>
+    <div class="proud">
+      <h2>Get ready to feel proud</h2>
+      <div class="cards">
+        <div class="card">
+        <a href="<?php echo $final; ?>" aria-label="Learn more about the student community">
+          <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/11.png" width="130" height="130" layout="responsive" alt="Group of students celebrating"></amp-img></a>
+          <div class="tx"><h3><a href="<?php echo $final; ?>">One of thousands</a></h3><p>Join one of the most vibrant student communities and make lifelong friends.</p></div>
+        </div>
+        <div class="card">
+        <a href="<?php echo $final; ?>" aria-label="Learn more about the student community">
+          <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/22.png" width="130" height="130" layout="responsive" alt="Globe icon surrounded by hands"></amp-img></a>
+          <div class="tx"><h3><a href="<?php echo $final; ?>">Global community</a></h3><p>Connect with learners from around the world and share perspectives.</p></div>
+        </div>
+        <div class="card">
+        <a href="<?php echo $final; ?>" aria-label="Learn more about the student community">
+          <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/33.png" width="130" height="130" layout="responsive" alt="Students studying together at a table"></amp-img></a>
+          <div class="tx"><h3><a href="<?php echo $final; ?>">Diverse &amp; talented</a></h3><p>Meet driven peers who bring unique talents and ideas to campus.</p></div>
+        </div>
+      </div>
+    </div>
+    <div class="quote">
+      <div class="im">
+      <a href="<?php echo $final; ?>" aria-label="Learn more about the student community">
+      <amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/Harbor/44.png" width="200" height="220" layout="responsive" alt="Smiling student in a denim jacket"></amp-img></a></div>
+      <div class="tx">
+        <p><?php echo $meta_description; ?></p>
+        <small>– <a href="<?php echo $final; ?>"><?php echo $titlebrand; ?></a>, Class of 2026, <?php echo $titlebrand; ?></small>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

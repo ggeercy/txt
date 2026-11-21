@@ -1,0 +1,105 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pacifico&family=Courier+Prime:wght@400;700&family=Montserrat:wght@500;700;800&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#fff;font-family:'Courier Prime',monospace;color:#111}
+    .wrap{max-width:480px;margin:0 auto;background:#f9f6f1}
+    .bar{background:#f26a21;display:flex;justify-content:center;gap:14px;padding:6px 10px;font-family:'Montserrat',sans-serif;font-size:12px;color:#fff;text-transform:uppercase}
+    .bar a{color:#fff;text-decoration:none}
+    .sky{background:#b9d3f0;text-align:center;padding:20px 22px 34px;position:relative;overflow:hidden}
+    .cloud{position:absolute;background:#fff;border-radius:50px;opacity:.9}
+    .c1{right:-20px;top:40px;width:90px;height:44px}
+    .c2{left:-30px;top:200px;width:70px;height:50px}
+    .c3{right:-24px;bottom:150px;width:90px;height:40px}
+    .logo{font-family:'Montserrat',sans-serif;font-weight:700;font-size:16px;margin:0 0 10px;position:relative}
+    .script{font-family:'Pacifico',cursive;font-size:34px;line-height:1.1;color:#0d0d0d;margin:0;position:relative}
+    .photo{border:6px solid #fff;margin:10px 0 18px;position:relative}
+    .sky p.t{font-size:12px;line-height:1.7;margin:16px 36px 18px;position:relative}
+    .btn{display:inline-block;background:#f26a21;color:#fff;text-decoration:none;font-family:'Montserrat',sans-serif;font-weight:800;font-size:12px;letter-spacing:1px;text-transform:uppercase;padding:10px 20px;position:relative}
+    .mid{padding:30px 24px 10px;text-align:center}
+    .mid h4{font-size:12px;font-weight:700;margin:0 0 16px}
+    .mid p{font-size:12px;line-height:1.9;margin:0 10px 22px}
+    .stars{display:flex;justify-content:space-around;color:#f27a6a;font-size:16px;padding:6px 8px}
+    .code{background:#e4e4e4;text-align:center;margin:18px 0;padding:14px 0 18px}
+    .code small{display:block;font-size:12px;margin-bottom:6px}
+    .code b{display:block;font-family:'Montserrat',sans-serif;font-weight:500;font-size:26px;color:#f26a21;letter-spacing:1px}
+    .code span{display:block;font-size:12px;margin-top:6px}
+    .warr{text-align:center;padding:24px 20px 30px}
+    .warr h2{font-family:'Montserrat',sans-serif;font-weight:700;font-size:20px;line-height:1.2;margin:0 0 8px}
+    .warr .s{font-family:'Pacifico',cursive;color:#f26a21;font-size:30px;margin:0 0 14px}
+    .warr p{font-size:12px;line-height:1.7;margin:0 24px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="bar"><a href="<?php echo $final; ?>">New</a><a href="<?php echo $final; ?>">Bags</a><a href="<?php echo $final; ?>">Gear</a><a href="<?php echo $final; ?>">Sale</a><a href="<?php echo $final; ?>">More</a></div>
+    <div class="sky">
+      <span class="cloud c1"></span><span class="cloud c2"></span><span class="cloud c3"></span>
+      <div class="brand" style="margin-top: 0; text-align: center">
+          <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+        </div>
+      <h1 class="script"><?php echo $titlebrand; ?></h1>
+      <div class="photo"><amp-img src="<?php echo $banner; ?>" width="290" height="190" layout="responsive" alt="Tote bag, backpack, water bottle and towel on a crowded beach"></amp-img></div>
+      <h1 class="script"><?php echo ucwords($title); ?></h1>
+      <p class="t"><?php echo $meta_description; ?></p>
+      <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+      <a class="btn" href="<?php echo $final; ?>">Login</a>
+    </div>
+    <div class="mid">
+      <h4>Summer’s almost out, but the savings are in.</h4>
+      <p>Your must-have essentials are marked down now. Grab the deals, then use that code to keep the savings coming in style.</p>
+      <div class="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+      <div class="code"><small>Use code</small><b><?php echo $titlebrand; ?></b><span>at checkout</span></div>
+      <div class="stars"><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span><span>★</span></div>
+    </div>
+    <div class="warr">
+      <h2>FOR EVERY KIND OF</h2>
+      <p class="s">Weekend Warriors</p>
+      <p><?php echo $meta_description; ?></p>
+    </div>
+  </div>
+</body>
+</html>

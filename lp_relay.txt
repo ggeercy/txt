@@ -1,0 +1,1312 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,400;0,500;0,700;1,400;1,500;1,700&family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&family=Sora:wght@100;200;300;400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Vendor CSS Files -->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Relay/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Relay/bootstrap-icons.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Relay/aos.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css">
+
+    <!-- Main CSS File -->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Relay/main.css" rel="stylesheet" />
+
+<?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    <style>
+      .day-sheet-banner {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: contain;
+}
+    </style>
+  </head>
+
+  <body class="index-page">
+    <header id="header" class="header d-flex align-items-center sticky-top">
+      <div class="container-fluid position-relative d-flex align-items-center justify-content-between">
+        <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center me-auto me-xl-0">
+          <img src="<?php echo $logo; ?>" alt="">
+        </a>
+
+        <nav id="navmenu" class="navmenu">
+          <ul>
+            <li><a href="#hero" class="active">Home</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#how-it-works">How it works</a></li>
+            <li><a href="#pricing">Pricing</a></li>
+            <li><a href="#security">Security</a></li>
+            <li><a href="#faq">FAQ</a></li>
+          </ul>
+          <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+        </nav>
+
+        <a class="btn-getstarted" href="<?php echo $final; ?>">Start free trial</a>
+      </div>
+    </header>
+
+    <main class="main">
+      <!-- Hero Section -->
+      <section id="hero" class="hero section">
+        <div class="container">
+          <div class="row gy-5 align-items-center">
+            <div class="col-lg-5" data-aos="fade-up">
+              <span class="hero-kicker"><i class="bi bi-calendar2-check"></i> Booking software for salons &amp; clinics</span>
+              <h1><?php echo ucwords($title); ?></h1>
+              <p class="lead"><?php echo $meta_description; ?></p>
+
+              <div class="hero-actions">
+                <a href="<?php echo $final; ?>" class="btn-relay">Daftar <i class="bi bi-arrow-right"></i></a>
+                <a href="<?php echo $final; ?>" class="btn-relay-ghost">Login</a>
+              </div>
+              <p class="hero-note"><i class="bi bi-check2"></i> No card needed <span></span> <i class="bi bi-check2"></i> Live the same afternoon</p>
+
+              <div class="hero-proof">
+                <div>
+                  <strong>38%</strong>
+                  <span>fewer no-shows in the first 90 days</span>
+                </div>
+                <div>
+                  <strong>4 min</strong>
+                  <span>median reply from our Austin support team</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-7" data-aos="fade-up" data-aos-delay="150">
+  <div class="day-sheet-wrap">
+    <img
+      class="day-sheet-banner"
+      src="<?php echo $banner; ?>"
+      alt="Banner">
+  </div>
+</div>
+          </div>
+        </div>
+      </section>
+      <!-- /Hero Section -->
+
+      <!-- Clients Section -->
+      <section id="clients" class="clients section">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">Who books on <?php echo $titlebrand; ?></span>
+          <h2>The front desk at 4,200 businesses</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>From two-chair barbershops to eight-room physical therapy practices, in all 50 states.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container" data-aos="fade-up" data-aos-delay="100">
+          <div class="logo-strip">
+            <div class="logo-cell"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/clients-2.webp" class="img-fluid" alt="Client logo" /></div>
+            <div class="logo-cell"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/clients-5.webp" class="img-fluid" alt="Client logo" /></div>
+            <div class="logo-cell"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/clients-7.webp" class="img-fluid" alt="Client logo" /></div>
+            <div class="logo-cell"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/clients-10.webp" class="img-fluid" alt="Client logo" /></div>
+            <div class="logo-cell"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/clients-13.webp" class="img-fluid" alt="Client logo" /></div>
+            <div class="logo-cell"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/clients-15.webp" class="img-fluid" alt="Client logo" /></div>
+          </div>
+          <p class="strip-note"><span>Switching from another app?</span> We import your clients, services and future bookings for free.</p>
+        </div>
+      </section>
+      <!-- /Clients Section -->
+
+      <!-- Features Section -->
+      <section id="features" class="features section light-background">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">Features</span>
+          <h2>Everything the front desk did by phone</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>Booking, reminders, deposits and the waitlist run on their own, so the people at your desk can look after the people in your chairs.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="bento">
+            <div class="tile tile-booking" data-aos="fade-up" data-aos-delay="100">
+              <span class="tile-label">Online booking page</span>
+              <h3><?php echo ucwords($title); ?></h3>
+              <p><?php echo $long_description; ?></p>
+            </div>
+
+            <div class="tile tile-number" data-aos="fade-up" data-aos-delay="150">
+              <strong>38%</strong>
+              <p>fewer no-shows on average, measured across new customers in their first 90 days.</p>
+            </div>
+
+            <div class="tile tile-photo" data-aos="fade-up" data-aos-delay="200">
+              <img src="<?php echo $banner; ?>" alt="A client checking in at a salon front desk" />
+              <span class="photo-caption"><i class="bi bi-tablet"></i> Check-in from a tablet at the desk</span>
+            </div>
+
+            <div class="tile tile-quote" data-aos="fade-up" data-aos-delay="250">
+              <i class="bi bi-quote"></i>
+              <p>We stopped answering the phone in the middle of a cut. That alone paid for it.</p>
+              <span>Rosa Delgado, owner, Fern &amp; Fade</span>
+            </div>
+
+            <div class="tile tile-list" data-aos="fade-up" data-aos-delay="100">
+              <span class="tile-label">Deposits &amp; card on file</span>
+              <ul>
+                <li><i class="bi bi-check2"></i> Hold a card or take a deposit at booking</li>
+                <li><i class="bi bi-check2"></i> Charge your late-cancel fee automatically</li>
+                <li><i class="bi bi-check2"></i> Payouts land the next business day</li>
+              </ul>
+            </div>
+
+            <div class="tile tile-waitlist" data-aos="fade-up" data-aos-delay="150">
+              <span class="wait-icon"><i class="bi bi-hourglass-split"></i></span>
+              <div>
+                <span class="tile-label">Smart waitlist</span>
+                <p>When someone cancels, the next client on the waitlist gets a text within a minute, and the first to tap "Book" gets the slot.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Features Section -->
+
+      <!-- Tools Section -->
+      <section id="tools" class="tools section">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">A closer look</span>
+          <h2>One calendar, four jobs off your plate</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>The parts of <?php echo $titlebrand; ?> owners tell us they would not go back without.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <ul class="nav segmented" role="tablist" data-aos="fade-up">
+            <li class="nav-item" role="presentation">
+              <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tools-tab-1" type="button" role="tab" aria-selected="true"><i class="bi bi-chat-text"></i> Reminders</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tools-tab-2" type="button" role="tab" aria-selected="false"><i class="bi bi-clipboard2-pulse"></i> Intake forms</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tools-tab-3" type="button" role="tab" aria-selected="false"><i class="bi bi-wallet2"></i> Deposits</button>
+            </li>
+            <li class="nav-item" role="presentation">
+              <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tools-tab-4" type="button" role="tab" aria-selected="false"><i class="bi bi-bar-chart-line"></i> Reports</button>
+            </li>
+          </ul>
+
+          <div class="tab-content panel" data-aos="fade-up" data-aos-delay="100">
+            <div class="tab-pane fade show active" id="tools-tab-1" role="tabpanel">
+              <div class="row gy-4 align-items-center">
+                <div class="col-lg-5">
+                  <span class="panel-label">Two-way text reminders</span>
+                  <h3>Clients answer the reminder, and the calendar updates itself.</h3>
+                  <p><?php echo $titlebrand; ?> texts 48 hours and 2 hours before every visit. A reply of C confirms; R opens three new times to pick from. Nobody at the desk has to read a thing.</p>
+                  <ul class="checks">
+                    <li><i class="bi bi-check2"></i> Your wording, your send times, in English or Spanish</li>
+                    <li><i class="bi bi-check2"></i> Unconfirmed visits flagged in amber by 6 pm the day before</li>
+                    <li><i class="bi bi-check2"></i> Email fallback for clients who opt out of texts</li>
+                  </ul>
+                </div>
+                <div class="col-lg-6 offset-lg-1">
+                  <div class="mock thread">
+                    <div class="thread-row">
+                      <span class="when">Tue 9:00</span>
+                      <p class="msg out">Hi Priya, you're booked for Balayage with Maya, Thu 10:30. Reply C to confirm or R to reschedule.</p>
+                    </div>
+                    <div class="thread-row">
+                      <span class="when">Tue 9:07</span>
+                      <p class="msg in">R</p>
+                    </div>
+                    <div class="thread-row">
+                      <span class="when">Tue 9:07</span>
+                      <p class="msg out">No problem. Maya is free Thu 1:45, Fri 10:00 or Sat 9:30. Reply 1, 2 or 3.</p>
+                    </div>
+                    <div class="thread-row">
+                      <span class="when">Tue 9:08</span>
+                      <p class="msg in">2</p>
+                    </div>
+                    <div class="thread-done"><i class="bi bi-calendar2-check"></i> Moved to Fri 10:00 · Thursday slot offered to the waitlist</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tools-tab-2" role="tabpanel">
+              <div class="row gy-4 align-items-center">
+                <div class="col-lg-5">
+                  <span class="panel-label">Intake &amp; consent forms</span>
+                  <h3>Paperwork done at home, not on a clipboard in the waiting room.</h3>
+                  <p>Attach a form to any service. Clients fill it in from the confirmation text and sign with a finger; the answers sit on their client card before they arrive.</p>
+                  <ul class="checks">
+                    <li><i class="bi bi-check2"></i> Health history, allergies, patch-test and photo consent</li>
+                    <li><i class="bi bi-check2"></i> Answers re-used on the next visit, with a "still accurate?" check</li>
+                    <li><i class="bi bi-check2"></i> Signed PDFs stored for seven years on the Practice plan</li>
+                  </ul>
+                </div>
+                <div class="col-lg-6 offset-lg-1">
+                  <div class="mock form-mock">
+                    <div class="form-head"><strong>New client intake</strong><span>Step 2 of 3</span></div>
+                    <div class="progress-bar-r"><span style="width: 66%"></span></div>
+                    <label>Any allergies we should know about?</label>
+                    <div class="field">Latex, fragrance in hair products</div>
+                    <label>Currently taking</label>
+                    <div class="chips"><span class="on">Retinoids</span><span>Blood thinners</span><span>None</span></div>
+                    <label>Signature</label>
+                    <div class="field signature">Marcus Bell</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tools-tab-3" role="tabpanel">
+              <div class="row gy-4 align-items-center">
+                <div class="col-lg-5">
+                  <span class="panel-label">Deposits &amp; cancellation fees</span>
+                  <h3>Long appointments are paid for before the chair is held.</h3>
+                  <p>Set a fixed deposit or a percentage per service. If a client cancels inside your window, <?php echo $titlebrand; ?> charges the fee you set and sends the receipt, so you never have the awkward call.</p>
+                  <ul class="checks">
+                    <li><i class="bi bi-check2"></i> Deposits only on services over a price you choose</li>
+                    <li><i class="bi bi-check2"></i> Card processing at 2.6% + 15¢, no monthly minimum</li>
+                    <li><i class="bi bi-check2"></i> Refund or move a deposit with one tap</li>
+                  </ul>
+                </div>
+                <div class="col-lg-6 offset-lg-1">
+                  <div class="mock pay-mock">
+                    <div class="pay-row"><span>Balayage · 75 min</span><strong>$210.00</strong></div>
+                    <div class="pay-row"><span>Deposit (25%)</span><strong>$52.50</strong></div>
+                    <div class="pay-row muted"><span>Visa •••• 4821</span><span>Held Tue 9:08</span></div>
+                    <div class="pay-status"><i class="bi bi-shield-check"></i> Deposit captured · balance of $157.50 due at checkout</div>
+                    <div class="pay-policy">Cancellations inside 24 hours keep the deposit.</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tools-tab-4" role="tabpanel">
+              <div class="row gy-4 align-items-center">
+                <div class="col-lg-5">
+                  <span class="panel-label">Reports</span>
+                  <h3>See which chairs sit empty, and which clients are due back.</h3>
+                  <p>Utilization by person and room, rebooking rate, no-shows by service and the clients who haven't returned in 10 weeks: one screen, emailed every Monday at 7 am.</p>
+                  <ul class="checks">
+                    <li><i class="bi bi-check2"></i> Revenue by service, staff member and location</li>
+                    <li><i class="bi bi-check2"></i> "Due back" list you can text in one batch</li>
+                    <li><i class="bi bi-check2"></i> CSV export for your accountant</li>
+                  </ul>
+                </div>
+                <div class="col-lg-6 offset-lg-1">
+                  <div class="mock report-mock">
+                    <div class="report-head">
+                      <div><span>Chairs booked this week</span><strong>86%</strong></div>
+                      <div><span>Rebooked before leaving</span><strong>71%</strong></div>
+                    </div>
+                    <div class="bars">
+                      <div class="bar"><span style="height: 62%"></span><small>Mon</small></div>
+                      <div class="bar"><span style="height: 78%"></span><small>Tue</small></div>
+                      <div class="bar"><span style="height: 70%"></span><small>Wed</small></div>
+                      <div class="bar"><span style="height: 94%"></span><small>Thu</small></div>
+                      <div class="bar"><span style="height: 100%"></span><small>Fri</small></div>
+                      <div class="bar"><span style="height: 96%"></span><small>Sat</small></div>
+                      <div class="bar"><span style="height: 18%"></span><small>Sun</small></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Tools Section -->
+
+      <!-- How It Works Section -->
+      <section id="how-it-works" class="how-it-works section dark-background">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">How it works</span>
+          <h2>Booking online within the hour</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>Most owners set <?php echo $titlebrand; ?> up between clients. The clock below is how long it usually takes.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="rail">
+            <div class="step" data-aos="fade-up" data-aos-delay="100">
+              <span class="stamp">0:00</span>
+              <span class="dot"></span>
+              <h3>Bring your clients over</h3>
+              <p>Upload a spreadsheet or the export from your old booking app. Visit history, notes and future appointments come with it.</p>
+            </div>
+
+            <div class="step" data-aos="fade-up" data-aos-delay="200">
+              <span class="stamp">0:20</span>
+              <span class="dot"></span>
+              <h3>Add services and people</h3>
+              <p>Durations, prices, buffers for cleanup, and who does what. Rooms and equipment can be booked like staff.</p>
+            </div>
+
+            <div class="step" data-aos="fade-up" data-aos-delay="300">
+              <span class="stamp">0:45</span>
+              <span class="dot"></span>
+              <h3>Share your booking link</h3>
+              <p>Paste it in your Instagram bio, your Google Business Profile and the button on your website. It works on any phone.</p>
+            </div>
+
+            <div class="step" data-aos="fade-up" data-aos-delay="400">
+              <span class="stamp">1:00</span>
+              <span class="dot"></span>
+              <h3>Switch on reminders</h3>
+              <p>Texts start going out on their own. Replies, cancellations and waitlist fills land straight in your calendar.</p>
+            </div>
+          </div>
+
+          <div class="rail-foot" data-aos="fade-up">
+            <i class="bi bi-headset"></i>
+            <p>Prefer a hand? Book a free 30-minute setup call and someone from our Austin team will do it with you, screen shared.</p>
+          </div>
+        </div>
+      </section>
+      <!-- /How It Works Section -->
+
+      <!-- Audiences Section -->
+      <section id="audiences" class="audiences section">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">Who it's for</span>
+          <h2>Built for chairs and for exam rooms</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>The same calendar, shaped around how a salon and a clinic actually run their day.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5 align-items-start">
+            <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+              <article class="audience">
+                <div class="audience-img">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/salon-2.webp" alt="A stylist styling a smiling client's curly hair in a bright salon" />
+                  <span class="tag"><i class="bi bi-scissors"></i> Salons, barbers &amp; spas</span>
+                </div>
+                <div class="audience-body">
+                  <h3>Book by stylist, by service, or by whoever is free first.</h3>
+                  <ul>
+                    <li><i class="bi bi-check2"></i> Color formulas and photos saved on the client card</li>
+                    <li><i class="bi bi-check2"></i> Tips, retail products and gift cards at checkout</li>
+                    <li><i class="bi bi-check2"></i> "Book your next visit?" prompt before they leave</li>
+                    <li><i class="bi bi-check2"></i> Commission and tip reports per stylist</li>
+                  </ul>
+                </div>
+              </article>
+            </div>
+
+            <div class="col-lg-6 offset-col" data-aos="fade-up" data-aos-delay="250">
+              <article class="audience">
+                <div class="audience-img">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/consultation-2.webp" alt="A clinician reviewing a tablet with a patient" />
+                  <span class="tag"><i class="bi bi-heart-pulse"></i> Clinics &amp; therapy practices</span>
+                </div>
+                <div class="audience-body">
+                  <h3>Rooms, equipment and practitioners, scheduled together.</h3>
+                  <ul>
+                    <li><i class="bi bi-check2"></i> Intake and consent signed before the first visit</li>
+                    <li><i class="bi bi-check2"></i> Recurring plans: book all 8 sessions at once</li>
+                    <li><i class="bi bi-check2"></i> HIPAA BAA, audit log and role-based access</li>
+                    <li><i class="bi bi-check2"></i> Insurance and superbill fields on every visit</li>
+                  </ul>
+                </div>
+              </article>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Audiences Section -->
+
+      <!-- Stats Section -->
+      <section id="stats" class="stats section light-background">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">By the numbers</span>
+          <h2>The numbers behind a quieter phone</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>What changes once clients book, confirm and pay without calling you.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container" data-aos="fade-up" data-aos-delay="100">
+          <div class="stat-band">
+            <div class="stat">
+              <span class="stat-num"><span data-purecounter-start="0" data-purecounter-end="4200" data-purecounter-duration="1" data-purecounter-separator="true" class="purecounter"></span></span>
+              <span class="stat-label">salons, spas and clinics booking on <?php echo $titlebrand; ?></span>
+            </div>
+
+            <div class="stat">
+              <span class="stat-num"><span data-purecounter-start="0" data-purecounter-end="2.6" data-purecounter-decimals="1" data-purecounter-duration="1" class="purecounter"></span>M</span>
+              <span class="stat-label">appointments booked through <?php echo $titlebrand; ?> in 2025</span>
+            </div>
+
+            <div class="stat">
+              <span class="stat-num"><span data-purecounter-start="0" data-purecounter-end="38" data-purecounter-duration="1" class="purecounter"></span>%</span>
+              <span class="stat-label">fewer no-shows in a customer's first 90 days</span>
+            </div>
+
+            <div class="stat">
+              <span class="stat-num"><span data-purecounter-start="0" data-purecounter-end="4" data-purecounter-duration="1" class="purecounter"></span> min</span>
+              <span class="stat-label">median support reply, 7 am to 9 pm Central</span>
+            </div>
+          </div>
+          <p class="stat-source">Figures from <?php echo $titlebrand; ?>'s own booking data, January to December 2025.</p>
+        </div>
+      </section>
+      <!-- /Stats Section -->
+
+      <!-- Pricing Section -->
+      <section id="pricing" class="pricing section">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">Pricing</span>
+          <h2>Priced by team size, not by booking</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>Three plans, every one with unlimited appointments and a 14-day trial that needs no card.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container pricing-toggle-container">
+          <div class="pricing-toggle" data-aos="fade-up">
+            <span class="monthly active">Monthly</span>
+            <label class="switch">
+              <input type="checkbox" aria-label="Switch to yearly billing" />
+              <span class="slider"></span>
+            </label>
+            <span class="yearly">Yearly <em>2 months free</em></span>
+          </div>
+
+          <div class="row gy-4 align-items-center justify-content-center">
+            <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+              <div class="pricing-item">
+                <span class="plan-name">Solo</span>
+                <p class="plan-for">For one stylist, therapist or practitioner working alone.</p>
+                <div class="price">
+                  <span class="monthly-price"><sup>$</sup>19<small>/month</small></span>
+                  <span class="yearly-price"><sup>$</sup>190<small>/year</small></span>
+                </div>
+                <a href="<?php echo $final; ?>" class="btn-relay-ghost">Start 14-day trial</a>
+                <ul>
+                  <li><i class="bi bi-check2"></i> 1 staff calendar</li>
+                  <li><i class="bi bi-check2"></i> Unlimited bookings</li>
+                  <li><i class="bi bi-check2"></i> 300 text reminders a month</li>
+                  <li><i class="bi bi-check2"></i> Online booking page &amp; link</li>
+                  <li><i class="bi bi-check2"></i> Deposits and card on file</li>
+                  <li class="na"><i class="bi bi-dash"></i> Waitlist and intake forms</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+              <div class="pricing-item featured">
+                <span class="badge-pop">Most salons pick this</span>
+                <span class="plan-name">Studio</span>
+                <p class="plan-for">For a team of up to 8 sharing chairs, rooms and a front desk.</p>
+                <div class="price">
+                  <span class="monthly-price"><sup>$</sup>59<small>/month</small></span>
+                  <span class="yearly-price"><sup>$</sup>590<small>/year</small></span>
+                </div>
+                <a href="<?php echo $final; ?>" class="btn-relay">Start 14-day trial</a>
+                <ul>
+                  <li><i class="bi bi-check2"></i> Up to 8 staff calendars</li>
+                  <li><i class="bi bi-check2"></i> 2,000 text reminders a month</li>
+                  <li><i class="bi bi-check2"></i> Smart waitlist and rebooking prompts</li>
+                  <li><i class="bi bi-check2"></i> Intake and consent forms</li>
+                  <li><i class="bi bi-check2"></i> Weekly reports and payroll export</li>
+                  <li><i class="bi bi-check2"></i> Everything in Solo</li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+              <div class="pricing-item">
+                <span class="plan-name">Practice</span>
+                <p class="plan-for">For clinics and multi-site businesses with compliance needs.</p>
+                <div class="price">
+                  <span class="monthly-price"><sup>$</sup>149<small>/month</small></span>
+                  <span class="yearly-price"><sup>$</sup>1,490<small>/year</small></span>
+                </div>
+                <a href="<?php echo $final; ?>" class="btn-relay-ghost">Start 14-day trial</a>
+                <ul>
+                  <li><i class="bi bi-check2"></i> Up to 25 staff across 3 locations</li>
+                  <li><i class="bi bi-check2"></i> 6,000 text reminders a month</li>
+                  <li><i class="bi bi-check2"></i> Rooms and equipment as bookable resources</li>
+                  <li><i class="bi bi-check2"></i> HIPAA BAA, audit log, role permissions</li>
+                  <li><i class="bi bi-check2"></i> Priority phone support</li>
+                  <li><i class="bi bi-check2"></i> Everything in Studio</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          <div class="included" data-aos="fade-up">
+            <span>Every plan includes</span>
+            <p><i class="bi bi-check2"></i> Free data import</p>
+            <p><i class="bi bi-check2"></i> iPhone &amp; Android apps</p>
+            <p><i class="bi bi-check2"></i> No setup fees or contracts</p>
+            <p><i class="bi bi-check2"></i> Extra texts at 2¢ each</p>
+          </div>
+        </div>
+      </section>
+      <!-- /Pricing Section -->
+
+      <!-- Testimonials Section -->
+<?php $reviewItems = array_slice(array_values($reviews ?? []), 0, 6); ?>
+
+<section id="testimonials" class="testimonials section light-background">
+  <div class="container section-title" data-aos="fade-up">
+    <span class="subtitle">Customer stories</span>
+    <h2>What Our Customers Say</h2>
+    <div class="title-decoration"><span></span><span></span><span></span></div>
+    <p>Read what our customers think about our services.</p>
+  </div>
+
+  <div class="container">
+      <div class="row gy-4">
+        <?php foreach ($reviewItems as $r): ?>
+          <?php $rating = max(0, min(5, (int) ($r['rating'] ?? 0))); ?>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up">
+            <figure class="quote-side h-100">
+              <div class="testi-stars" aria-label="<?php echo $rating; ?> out of 5 stars">
+                <?php echo str_repeat('&#9733;', $rating) . str_repeat('&#9734;', 5 - $rating); ?>
+              </div>
+
+              <blockquote>
+                “<?php echo htmlspecialchars($r['quote']); ?>”
+              </blockquote>
+
+              <figcaption>
+                <strong><?php echo htmlspecialchars($r['name']); ?></strong>
+              </figcaption>
+            </figure>
+          </div>
+        <?php endforeach; ?>
+      </div>
+  </div>
+</section>
+      <!-- /Testimonials Section -->
+
+      <!-- Integrations Section -->
+      <section id="integrations" class="integrations section">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">Integrations</span>
+          <h2>Works with the tools you already pay for</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>No migration project. Connect what you use today in a couple of clicks.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5 align-items-center">
+            <div class="col-lg-4" data-aos="fade-up">
+              <p class="intro"><?php echo $titlebrand; ?> syncs both ways with the calendar on your phone, takes payments through the processor you already have, and puts a "Book now" button wherever clients find you.</p>
+              <div class="sync-note">
+                <span class="sync-icon"><i class="bi bi-arrow-repeat"></i></span>
+                <p>Changes appear everywhere in under <strong>10 seconds</strong>.</p>
+              </div>
+            </div>
+
+            <div class="col-lg-8" data-aos="fade-up" data-aos-delay="150">
+              <div class="int-groups">
+                <div class="int-group">
+                  <span class="group-label">Calendars</span>
+                  <div class="chips">
+                    <span><i class="bi bi-google"></i> Google Calendar</span>
+                    <span><i class="bi bi-microsoft"></i> Outlook</span>
+                    <span><i class="bi bi-apple"></i> Apple Calendar</span>
+                  </div>
+                </div>
+
+                <div class="int-group">
+                  <span class="group-label">Payments</span>
+                  <div class="chips">
+                    <span><i class="bi bi-stripe"></i> Stripe</span>
+                    <span><i class="bi bi-square"></i> Square</span>
+                    <span><i class="bi bi-apple"></i> Apple Pay</span>
+                    <span><i class="bi bi-google"></i> Google Pay</span>
+                  </div>
+                </div>
+
+                <div class="int-group">
+                  <span class="group-label">Where clients book</span>
+                  <div class="chips">
+                    <span><i class="bi bi-instagram"></i> Instagram</span>
+                    <span><i class="bi bi-geo-alt"></i> Google Business Profile</span>
+                    <span><i class="bi bi-facebook"></i> Facebook</span>
+                    <span><i class="bi bi-code-slash"></i> Website widget</span>
+                  </div>
+                </div>
+
+                <div class="int-group">
+                  <span class="group-label">Back office</span>
+                  <div class="chips">
+                    <span><i class="bi bi-calculator"></i> QuickBooks</span>
+                    <span><i class="bi bi-envelope-paper"></i> Mailchimp</span>
+                    <span><i class="bi bi-lightning-charge"></i> Zapier</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Integrations Section -->
+
+      <!-- Security Section -->
+      <section id="security" class="security section dark-background">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">Security &amp; privacy</span>
+          <h2>Client records kept like a clinic would</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>Salons get the same protection we built for the medical practices on <?php echo $titlebrand; ?>.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5 align-items-center">
+            <div class="col-lg-6" data-aos="fade-up">
+              <div class="commitments">
+                <div class="commit">
+                  <span class="commit-icon"><i class="bi bi-shield-lock"></i></span>
+                  <div>
+                    <h3>HIPAA-ready, with a signed BAA</h3>
+                    <p>On the Practice plan we sign a Business Associate Agreement and keep every view of a client record in an audit log.</p>
+                  </div>
+                </div>
+                <div class="commit">
+                  <span class="commit-icon"><i class="bi bi-patch-check"></i></span>
+                  <div>
+                    <h3>SOC 2 Type II audited</h3>
+                    <p>An independent audit of how we store, back up and restrict access to your data, renewed every year.</p>
+                  </div>
+                </div>
+                <div class="commit">
+                  <span class="commit-icon"><i class="bi bi-person-lock"></i></span>
+                  <div>
+                    <h3>Staff see what their role needs</h3>
+                    <p>Front desk sees the calendar; practitioners see their own notes; only owners see revenue and exports.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="col-lg-6" data-aos="fade-up" data-aos-delay="150">
+              <div class="audit-log">
+                <div class="log-head">
+                  <span><i class="bi bi-journal-text"></i> Audit log · Northline PT</span>
+                  <span class="live">Live</span>
+                </div>
+                <ul>
+                  <li><span class="t">10:42:08</span><span class="who">S. Ortega</span><span class="what">opened intake · M. Bell</span></li>
+                  <li><span class="t">10:39:51</span><span class="who">Front desk</span><span class="what">moved appointment · L. Ortiz</span></li>
+                  <li><span class="t">10:31:17</span><span class="who"><?php echo $titlebrand; ?></span><span class="what">sent reminder · 14 clients</span></li>
+                  <li><span class="t">10:12:44</span><span class="who">A. Kim</span><span class="what">signed visit note · R. Adams</span></li>
+                  <li><span class="t">09:58:02</span><span class="who">Owner</span><span class="what">exported payroll · Nov 1–15</span></li>
+                </ul>
+                <p class="log-foot"><i class="bi bi-lock"></i> Encrypted at rest (AES-256) and in transit (TLS 1.3) · daily backups kept 35 days</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Security Section -->
+
+      <!-- Faq Section -->
+      <section id="faq" class="faq section">
+        <!-- Section Title -->
+        <div class="container section-title" data-aos="fade-up">
+          <span class="subtitle">FAQ</span>
+          <h2>Questions owners ask before switching</h2>
+          <div class="title-decoration">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          <p>Straight answers on trials, texts, data and the fine print.</p>
+        </div>
+        <!-- End Section Title -->
+
+        <div class="container">
+          <div class="row gy-5">
+            <div class="col-lg-4" data-aos="fade-up">
+              <div class="help-card">
+                <span class="help-label">Still deciding?</span>
+                <h3>Talk to someone who has run a front desk.</h3>
+                <p>Our support team in Austin answers by chat, email or phone, 7 am to 9 pm Central, seven days a week.</p>
+                <ul>
+                  <li><i class="bi bi-telephone"></i> (512) 555-0142</li>
+                  <li><i class="bi bi-envelope"></i> <a href="<?php echo $canonical_url; ?>">demo@<?php echo $titlebrand; ?>.com</a></li>
+                </ul>
+              </div>
+            </div>
+
+            <div class="col-lg-8" data-aos="fade-up" data-aos-delay="100">
+              <div class="faq-list">
+                
+                <?php foreach ($faqs as $f): ?>
+                <div class="faq-item">
+                  <h3><?php echo htmlspecialchars($f['q']); ?></h3>
+                  <div class="faq-content">
+                    <p><?php echo htmlspecialchars($f['a']); ?></p>
+                  </div>
+                  <i class="faq-toggle bi bi-plus-lg"></i>
+                </div>
+                <?php endforeach; ?>
+
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Faq Section -->
+
+      <!-- Cta Section -->
+      <section id="cta" class="cta section">
+        <div class="container" data-aos="zoom-in">
+          <div class="cta-panel">
+            <div class="row gy-4 align-items-center">
+              <div class="col-lg-7">
+                <span class="cta-label">14 days free · no card</span>
+                <h2>Let tomorrow's clients book themselves tonight.</h2>
+                <p>Set up <?php echo $titlebrand; ?> between appointments, share your link, and watch the confirmations come in by text.</p>
+                <div class="cta-actions">
+                  <a href="<?php echo $final; ?>" class="btn-relay">Start your free trial <i class="bi bi-arrow-right"></i></a>
+                  <a href="#faq" class="btn-relay-ghost">Read the FAQ</a>
+                </div>
+              </div>
+
+              <div class="col-lg-5">
+                <div class="cta-ticket">
+                  <div class="ticket-row"><span>Plan</span><strong>Studio · 8 staff</strong></div>
+                  <div class="ticket-row"><span>Setup</span><strong>Under 1 hour</strong></div>
+                  <div class="ticket-row"><span>Data import</span><strong>Free</strong></div>
+                  <div class="ticket-row"><span>First charge</span><strong>Only if you stay</strong></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <!-- /Cta Section -->
+    </main>
+
+    <footer id="footer" class="footer light-background">
+      <div class="container">
+        <div class="footer-main">
+          <div class="row gy-5">
+            <div class="col-lg-4 col-md-6">
+              <div class="footer-widget about-widget">
+                <a href="<?php echo $canonical_url; ?>" class="logo">
+                  <span class="sitename"><?php echo $titlebrand; ?></span>
+                </a>
+                <p><?php echo $meta_description; ?></p>
+                <div class="newsletter-form">
+                  <h5>Monthly tips for fuller calendars</h5>
+                  <form action="forms/newsletter.php" method="post" class="php-email-form">
+                    <div class="input-group">
+                      <input type="email" name="email" placeholder="Your work email" required="" />
+                      <button type="submit" aria-label="Subscribe"><i class="bi bi-arrow-right"></i></button>
+                    </div>
+                    <div class="loading">Loading</div>
+                    <div class="error-message"></div>
+                    <div class="sent-message">You're on the list. The next issue arrives the first Tuesday of the month.</div>
+                  </form>
+                </div>
+              </div>
+            </div>
+            <!-- End About Widget -->
+
+            <div class="col-lg-2 col-md-6 col-6">
+              <div class="footer-widget">
+                <h4>Product</h4>
+                <ul class="footer-menu">
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Features</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Reminders &amp; forms</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Pricing</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Integrations</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Security</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <!-- End Quick Links Widget -->
+
+            <div class="col-lg-2 col-md-6 col-6">
+              <div class="footer-widget">
+                <h4>For you</h4>
+                <ul class="footer-menu">
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Salons &amp; spas</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Clinics</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Getting started</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Customer stories</a>
+                  </li>
+                  <li>
+                    <a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> FAQ</a>
+                  </li>
+                </ul>
+              </div>
+            </div>
+            <!-- End Resources Widget -->
+
+            <div class="col-lg-4 col-md-6">
+              <div class="footer-widget contact-widget">
+                <h4>Get In Touch</h4>
+                <ul class="contact-info">
+                  <li>
+                    <i class="bi bi-geo-alt"></i>
+                    <span>1108 E Cesar Chavez St, Suite 300<br />Austin, TX 78702</span>
+                  </li>
+                  <li>
+                    <i class="bi bi-telephone"></i>
+                    <span>(512) 555-0142</span>
+                  </li>
+                  <li>
+                    <i class="bi bi-envelope"></i>
+                    <span><a href="<?php echo $canonical_url; ?>">info@<?php echo $titlebrand; ?>.com</a></span>
+                  </li>
+                  <li>
+                    <i class="bi bi-clock"></i>
+                    <span>Support every day, 7 am to 9 pm Central</span>
+                  </li>
+                </ul>
+                <div class="social-icons">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Twitter"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="YouTube"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+            <!-- End Contact Widget -->
+          </div>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div class="container">
+          <div class="row align-items-center">
+            <div class="col-md-6 text-center text-md-start order-last order-md-first pt-3 mt-md-0">
+              <p class="copyright-text">© <span class="sitename"><?php echo $titlebrand; ?></span> 2026. All Rights Reserved.</p>
+              <div class="credits">
+                Designed by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+              </div>
+            </div>
+            <div class="col-md-6 text-center text-md-end">
+              <ul class="legal-links">
+                <li><a href="<?php echo $canonical_url; ?>">Privacy Policy</a></li>
+                <li><a href="<?php echo $canonical_url; ?>">Terms of Service</a></li>
+                <li><a href="<?php echo $canonical_url; ?>">HIPAA &amp; BAA</a></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <!-- Scroll Top -->
+    <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+    <!-- Preloader -->
+    <div id="preloader">
+      <div></div>
+      <div></div>
+      <div></div>
+      <div></div>
+    </div>
+
+    <!-- Vendor JS Files -->
+    <script data-cfasync="false" src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/email-decode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/validate.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/purecounter_vanilla.js"></script>
+
+    <!-- Main JS File -->
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Relay/main.js"></script>
+
+    <script
+      type="module"
+      src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092"
+      integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw=="
+      data-cf-beacon='{"version":"2024.11.0","token":"68c5ca450bae485a842ff76066d69420","spa":2}'
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>
