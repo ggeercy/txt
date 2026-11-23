@@ -1,0 +1,114 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#000;font-family:'Inter',Arial,sans-serif;color:#fff}
+    .wrap{max-width:480px;margin:0 auto;background:#000}
+    .nav{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;font-size:11px}
+    .nav .logo{display:flex;align-items:center;gap:6px;color:#7cff2a;font-size:11px}
+    .nav .logo i{width:14px;height:14px;border:3px solid #7cff2a;border-radius:50%;display:block}
+    .nav nav{display:flex;gap:18px}
+    .nav a{color:#fff;text-decoration:none}
+    .hero{background:radial-gradient(circle at 80% 30%,#b64fc0 0,#8a3fa8 40%,#3d1a55 100%);padding:28px 20px 34px;display:flex;gap:16px;align-items:flex-start}
+    .hero .l{flex:1}
+    .vinyl{position:relative;width:130px;margin-bottom:12px}
+    .hero .tag{font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#7cff2a;margin:0 0 6px}
+    .hero h1{font-family:'Instrument Serif',serif;font-weight:400;font-size:28px;line-height:1.1;margin:0 0 14px}
+    .hero p{font-size:11px;line-height:1.7;color:#f1e2f5;margin:0 0 18px}
+    .btn{display:inline-block;background:#7cff2a;color:#0a0a0a;text-decoration:none;font-size:11px;font-weight:600;padding:12px 26px;border-radius:20px}
+    .hero .r{flex:0 0 50%;align-self:center}
+    .plat{text-align:center;padding:38px 20px 26px;border-bottom:1px solid #333}
+    .plat .bar{width:48px;height:2px;background:#7cff2a;margin:0 auto 12px}
+    .plat small{display:block;font-size:11px;letter-spacing:3px;text-transform:uppercase;color:#7cff2a;margin-bottom:14px}
+    .plat h2{font-family:'Instrument Serif',serif;font-weight:400;font-size:22px;color:#7cff2a;margin:0 0 20px}
+    .icons{display:flex;justify-content:space-around;padding:0 40px}
+    .icons span{width:14px;height:14px;background:#fff;border-radius:50%;display:block}
+    .icons span:nth-child(2){border-radius:4px}
+    .icons span:nth-child(3){border-radius:3px}
+    .tl{text-align:center;padding:0 20px 30px;border-bottom:1px solid #333}
+    .tl h3{font-family:'Instrument Serif',serif;font-weight:400;font-size:13px;color:#7cff2a;margin:0;padding:18px 0 18px;border-bottom:1px solid #333}
+    .tracks{display:flex;gap:20px;justify-content:center;padding-top:20px;font-size:11px;line-height:2.6;text-align:left}
+    .tracks div{flex:0 0 38%}
+    .sp{height:24px}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="nav">
+      <div class="brand" style="margin-top: 0; text-align: center">
+          <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+        </div>
+      <nav><a href="<?php echo $final; ?>">Music</a><a href="<?php echo $final; ?>">Tour</a><a href="<?php echo $final; ?>">Contact</a></nav>
+      <a href="<?php echo $final; ?>">ID</a>
+    </div>
+    <div class="hero">
+      <div class="l">
+        <div class="vinyl"><amp-img src="<?php echo $banner; ?>" width="290" height="190" layout="responsive" alt="Album cover with vinyl record"></amp-img></div>
+        <p class="tag">Out now</p>
+        <h2><?php echo ucwords($title); ?></h2>
+        <p><?php echo $meta_description; ?></p>
+        <a class="btn" href="<?php echo $final; ?>">Daftar →</a>
+        <a class="btn" href="<?php echo $final; ?>">Login →</a>
+      </div>
+      <div class="r"><amp-img src="https://cdn.jsdelivr.net/gh/ggeercy/reveal/Avril-Lavigne-Photos.jpg" width="220" height="260" layout="responsive" alt="Portrait of the artist in a yellow jacket against an orange background"></amp-img></div>
+    </div>
+    <div class="plat">
+      <div class="bar"></div>
+      <small>Listen now</small>
+      <h2>Available on All Major Platforms</h2>
+      <div class="icons"><span></span><span></span><span></span></div>
+    </div>
+    <div class="tl">
+      <h3>Track List</h3>
+      <div class="tracks">
+        <div>1. Digital Love Track<br>2. Shared Silence<br>3. Aesthetic Existence<br>4. No One’s Watching<br>5. Cold Heart Light</div>
+        <div>6. Echo Chamber<br>7. Restless Reflections<br>8. Freedom (The Track)<br>9. Through the Static Layers<br>10. Changing Shades</div>
+      </div>
+    </div>
+    <div class="sp"></div>
+  </div>
+</body>
+</html>

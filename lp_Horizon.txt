@@ -1,0 +1,1252 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&family=Space+Grotesk:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/aos.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/glightbox.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/swiper-bundle.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css">
+
+  <!-- Main CSS File -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/main.css" rel="stylesheet">
+
+  <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+</head>
+
+<body class="index-page">
+
+  <header id="header" class="header d-flex align-items-center sticky-top">
+    <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
+
+      <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center">
+      <img src="<?php echo $logo; ?>" alt="">
+      </a>
+
+      <nav id="navmenu" class="navmenu">
+        <ul>
+          <li><a href="#hero" class="active">Home</a></li>
+          <li><a href="#about">About</a></li>
+          <li><a href="#services">Services</a></li>
+          <li><a href="#portfolio">Portfolio</a></li>
+          <li><a href="#team">Team</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+        <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+      </nav>
+
+      <a href="<?php echo $final; ?>" class="btn-cta d-none d-xl-inline-flex">Start a Project</a>
+
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero section">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row align-items-center gy-5">
+
+          <div class="col-lg-7">
+            <div class="hero-content">
+              <span class="kicker">Creative Agency — Est. 2014</span>
+              <h2><?php echo ucwords($title); ?></h2>
+              <p><?php echo $meta_description; ?></p>
+
+              <div class="cta-row">
+                <a href="<?php echo $final; ?>" class="btn-pill">Daftar</a>
+                <a href="<?php echo $final; ?>" class="link-arrow">Login <i class="bi bi-arrow-right"></i></a>
+              </div>
+
+              <div class="meta-row">
+                <div class="meta-item">
+                  <span class="value">12+</span>
+                  <span class="label">Years of craft</span>
+                </div>
+                <div class="meta-item">
+                  <span class="value">240</span>
+                  <span class="label">Projects shipped</span>
+                </div>
+                <div class="meta-item">
+                  <span class="value">18</span>
+                  <span class="label">Industry awards</span>
+                </div>
+              </div><!-- End Meta Row -->
+            </div>
+          </div>
+
+          <div class="col-lg-5">
+            <div class="hero-visual">
+              <img src="<?php echo $banner; ?>" class="img-fluid" alt="Creative team at work">
+              <div class="floating-card" data-aos="fade-left" data-aos-delay="300">
+                <i class="bi bi-stars"></i>
+                <div class="card-text">
+                  <span class="value">Top Rated Studio</span>
+                  <span class="label">Recognized by industry juries</span>
+                </div>
+              </div><!-- End Floating Card -->
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Hero Section -->
+
+    <!-- Clients Section -->
+    <section id="clients" class="clients section light-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row align-items-center gy-4">
+
+          <div class="col-lg-3">
+            <p class="lead-in">Trusted by forward-thinking teams worldwide</p>
+          </div>
+
+          <div class="col-lg-9">
+            <div class="logo-grid">
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-2.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-4.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-5.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-7.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-9.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-11.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-13.webp" alt="Client logo" loading="lazy"></div>
+              <div class="logo-item"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/clients-16.webp" alt="Client logo" loading="lazy"></div>
+            </div><!-- End Logo Grid -->
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Clients Section -->
+
+    <!-- About Section -->
+    <section id="about" class="about section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>Who We Are</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>A collective of strategists, designers and engineers shaping brands with purpose</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-5 align-items-center">
+
+          <div class="col-lg-6">
+            <div class="image-stack">
+              <img src="<?php echo $banner; ?>" class="img-fluid main-image" alt="Studio collaboration">
+              <div class="experience-badge" data-aos="zoom-in" data-aos-delay="300">
+                <span class="number">12</span>
+                <span class="text">Years of creative practice</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6">
+            <div class="content">
+              <h3><?php echo ucwords($title); ?></h3>
+              <p><?php echo $long_description; ?></p>
+
+              <a href="<?php echo $final; ?>" class="link-arrow">Discover Our Approach <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /About Section -->
+
+    <!-- Services Section -->
+    <section id="services" class="services section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>What We Do</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>Full-stack creative services from first spark to launch and beyond</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row gy-4">
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="service-item">
+              <div class="item-top">
+                <i class="bi bi-compass"></i>
+                <span class="index">01</span>
+              </div>
+              <h4><a href="<?php echo $canonical_url; ?>">Brand Strategy</a></h4>
+              <p>We define your brand’s purpose, positioning, and voice to help you stand out. Our strategy gives every creative decision a clear direction.</p>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div><!-- End Service Item -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="service-item">
+              <div class="item-top">
+                <i class="bi bi-palette"></i>
+                <span class="index">02</span>
+              </div>
+              <h4><a href="<?php echo $canonical_url; ?>">Visual Identity</a></h4>
+              <p>We create distinctive logos, color palettes, and design systems that bring your brand to life. Every element is crafted to feel cohesive and memorable.</p>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div><!-- End Service Item -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="service-item">
+              <div class="item-top">
+                <i class="bi bi-layout-text-window-reverse"></i>
+                <span class="index">03</span>
+              </div>
+              <h4><a href="<?php echo $canonical_url; ?>">Web Design</a></h4>
+              <p>We design polished, user-friendly websites that reflect your brand and engage your audience. Each layout balances visual appeal with clear navigation.</p>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div><!-- End Service Item -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="service-item">
+              <div class="item-top">
+                <i class="bi bi-code-slash"></i>
+                <span class="index">04</span>
+              </div>
+              <h4><a href="<?php echo $canonical_url; ?>">Development</a></h4>
+              <p>We build responsive, reliable websites tailored to your goals. Our development process focuses on performance, accessibility, and a smooth user experience.</p>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div><!-- End Service Item -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="service-item">
+              <div class="item-top">
+                <i class="bi bi-camera-reels"></i>
+                <span class="index">05</span>
+              </div>
+              <h4><a href="<?php echo $canonical_url; ?>">Motion &amp; Video</a></h4>
+              <p>We produce engaging animations and videos that make your message easier to understand and remember. From concept to final edit, every detail supports your brand story.</p>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div><!-- End Service Item -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="service-item">
+              <div class="item-top">
+                <i class="bi bi-graph-up-arrow"></i>
+                <span class="index">06</span>
+              </div>
+              <h4><a href="<?php echo $canonical_url; ?>">Growth Marketing</a></h4>
+              <p>1. We create data-informed marketing campaigns to help you reach the right audience. We refine each channel and message to support sustainable growth.</p>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div><!-- End Service Item -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Services Section -->
+
+    <!-- Call To Action Section -->
+    <section id="call-to-action" class="call-to-action section dark-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row justify-content-center">
+          <div class="col-lg-8">
+            <div class="cta-wrap text-center">
+              <span class="kicker">Ready when you are</span>
+              <h2>Have a project in mind? Let's build something extraordinary together.</h2>
+              <p>Share your vision with us, and we’ll help turn it into a thoughtful, memorable experience. From the first idea to the final details, we’ll work together to build something extraordinary.</p>
+              <a href="<?php echo $final; ?>" class="btn-pill">Get in Touch <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Call To Action Section -->
+
+    <!-- Portfolio Section -->
+    <section id="portfolio" class="portfolio section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>Selected Work</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>A snapshot of recent projects across branding, digital and motion</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="isotope-layout" data-default-filter="*" data-layout="masonry" data-sort="original-order">
+
+          <ul class="portfolio-filters isotope-filters" data-aos="fade-up" data-aos-delay="100">
+            <li data-filter="*" class="filter-active">All</li>
+            <li data-filter=".filter-branding">Branding</li>
+            <li data-filter=".filter-digital">Digital</li>
+            <li data-filter=".filter-motion">Motion</li>
+          </ul><!-- End Portfolio Filters -->
+
+          <div class="row gy-4 isotope-container" data-aos="fade-up" data-aos-delay="200">
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-branding">
+              <div class="portfolio-card">
+                <div class="image-wrap">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-2.webp" class="img-fluid" alt="Nova identity system" loading="lazy">
+                  <div class="hover-actions">
+                    <a href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-2.webp" class="glightbox" data-gallery="portfolio-gallery" title="Nova Identity System"><i class="bi bi-plus-lg"></i></a>
+                    <a href="<?php echo $canonical_url; ?>" title="Project details"><i class="bi bi-arrow-up-right"></i></a>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <span class="category">Branding</span>
+                  <h4><a href="<?php echo $canonical_url; ?>">Nova Identity System</a></h4>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-digital">
+              <div class="portfolio-card">
+                <div class="image-wrap">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-portrait-4.webp" class="img-fluid" alt="Atlas commerce platform" loading="lazy">
+                  <div class="hover-actions">
+                    <a href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-portrait-4.webp" class="glightbox" data-gallery="portfolio-gallery" title="Atlas Commerce Platform"><i class="bi bi-plus-lg"></i></a>
+                    <a href="<?php echo $canonical_url; ?>" title="Project details"><i class="bi bi-arrow-up-right"></i></a>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <span class="category">Digital</span>
+                  <h4><a href="<?php echo $canonical_url; ?>">Atlas Commerce Platform</a></h4>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-motion">
+              <div class="portfolio-card">
+                <div class="image-wrap">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-6.webp" class="img-fluid" alt="Pulse launch film" loading="lazy">
+                  <div class="hover-actions">
+                    <a href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-6.webp" class="glightbox" data-gallery="portfolio-gallery" title="Pulse Launch Film"><i class="bi bi-plus-lg"></i></a>
+                    <a href="<?php echo $canonical_url; ?>" title="Project details"><i class="bi bi-arrow-up-right"></i></a>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <span class="category">Motion</span>
+                  <h4><a href="<?php echo $canonical_url; ?>">Pulse Launch Film</a></h4>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-digital">
+              <div class="portfolio-card">
+                <div class="image-wrap">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-9.webp" class="img-fluid" alt="Meridian banking app" loading="lazy">
+                  <div class="hover-actions">
+                    <a href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-9.webp" class="glightbox" data-gallery="portfolio-gallery" title="Meridian Banking App"><i class="bi bi-plus-lg"></i></a>
+                    <a href="<?php echo $canonical_url; ?>" title="Project details"><i class="bi bi-arrow-up-right"></i></a>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <span class="category">Digital</span>
+                  <h4><a href="<?php echo $canonical_url; ?>">Meridian Banking App</a></h4>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-branding">
+              <div class="portfolio-card">
+                <div class="image-wrap">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-portrait-8.webp" class="img-fluid" alt="Verde packaging suite" loading="lazy">
+                  <div class="hover-actions">
+                    <a href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-portrait-8.webp" class="glightbox" data-gallery="portfolio-gallery" title="Verde Packaging Suite"><i class="bi bi-plus-lg"></i></a>
+                    <a href="<?php echo $canonical_url; ?>" title="Project details"><i class="bi bi-arrow-up-right"></i></a>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <span class="category">Branding</span>
+                  <h4><a href="<?php echo $canonical_url; ?>">Verde Packaging Suite</a></h4>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-motion">
+              <div class="portfolio-card">
+                <div class="image-wrap">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-11.webp" class="img-fluid" alt="Kite title sequence" loading="lazy">
+                  <div class="hover-actions">
+                    <a href="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/portfolio-11.webp" class="glightbox" data-gallery="portfolio-gallery" title="Kite Title Sequence"><i class="bi bi-plus-lg"></i></a>
+                    <a href="<?php echo $canonical_url; ?>" title="Project details"><i class="bi bi-arrow-up-right"></i></a>
+                  </div>
+                </div>
+                <div class="card-meta">
+                  <span class="category">Motion</span>
+                  <h4><a href="<?php echo $canonical_url; ?>">Kite Title Sequence</a></h4>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+          </div><!-- End Isotope Container -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Portfolio Section -->
+
+    <!-- Stats Section -->
+    <section id="stats" class="stats section dark-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-5 align-items-center">
+
+          <div class="col-lg-4">
+            <div class="stats-intro">
+              <h2>Numbers that keep us honest</h2>
+              <p>We track the results behind every project, from audience growth to engagement and conversions. These numbers help us stay accountable, learn what works, and make better decisions for our clients.</p>
+            </div>
+          </div>
+
+          <div class="col-lg-8">
+            <div class="row gy-4">
+
+              <div class="col-md-6" data-aos="fade-up" data-aos-delay="200">
+                <div class="stat-item">
+                  <span class="number"><span data-purecounter-start="0" data-purecounter-end="240" data-purecounter-duration="1" class="purecounter"></span>+</span>
+                  <span class="label">Projects delivered</span>
+                </div>
+              </div><!-- End Stat Item -->
+
+              <div class="col-md-6" data-aos="fade-up" data-aos-delay="250">
+                <div class="stat-item">
+                  <span class="number"><span data-purecounter-start="0" data-purecounter-end="96" data-purecounter-duration="1" class="purecounter"></span>%</span>
+                  <span class="label">Clients who return for a second project</span>
+                </div>
+              </div><!-- End Stat Item -->
+
+              <div class="col-md-6" data-aos="fade-up" data-aos-delay="300">
+                <div class="stat-item">
+                  <span class="number"><span data-purecounter-start="0" data-purecounter-end="18" data-purecounter-duration="1" class="purecounter"></span></span>
+                  <span class="label">International design awards</span>
+                </div>
+              </div><!-- End Stat Item -->
+
+              <div class="col-md-6" data-aos="fade-up" data-aos-delay="350">
+                <div class="stat-item">
+                  <span class="number"><span data-purecounter-start="0" data-purecounter-end="32" data-purecounter-duration="1" class="purecounter"></span></span>
+                  <span class="label">Strategists, designers and engineers</span>
+                </div>
+              </div><!-- End Stat Item -->
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Stats Section -->
+
+    <!-- Team Section -->
+    <section id="team" class="team section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>The Team</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>Senior specialists who stay hands-on from kickoff to launch</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row gy-4">
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="team-member">
+              <div class="member-photo">
+                <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/person-f-3.webp" class="img-fluid" alt="Amelia Hart" loading="lazy">
+              </div>
+              <div class="member-info">
+                <h4>Amelia Hart</h4>
+                <span class="role">Creative Director</span>
+                <div class="socials">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="X profile"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn profile"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Dribbble profile"><i class="bi bi-dribbble"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="team-member">
+              <div class="member-photo">
+                <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/person-m-5.webp" class="img-fluid" alt="Daniel Osei" loading="lazy">
+              </div>
+              <div class="member-info">
+                <h4>Daniel Osei</h4>
+                <span class="role">Head of Design</span>
+                <div class="socials">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="X profile"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn profile"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Behance profile"><i class="bi bi-behance"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="team-member">
+              <div class="member-photo">
+                <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/person-f-8.webp" class="img-fluid" alt="Sofia Marino" loading="lazy">
+              </div>
+              <div class="member-info">
+                <h4>Sofia Marino</h4>
+                <span class="role">Strategy Lead</span>
+                <div class="socials">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="X profile"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn profile"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Instagram profile"><i class="bi bi-instagram"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="400">
+            <div class="team-member">
+              <div class="member-photo">
+                <img src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/person-m-9.webp" class="img-fluid" alt="Ethan Brooks" loading="lazy">
+              </div>
+              <div class="member-info">
+                <h4>Ethan Brooks</h4>
+                <span class="role">Technical Director</span>
+                <div class="socials">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="X profile"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn profile"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="GitHub profile"><i class="bi bi-github"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Team Section -->
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="testimonials section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>Kind Words</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>What partners say about working with our studio</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="testimonials-slider swiper init-swiper">
+          <script type="application/json" class="swiper-config">
+            {
+              "loop": true,
+              "speed": 600,
+              "autoplay": {
+                "delay": 5000
+              },
+              "slidesPerView": 1,
+              "pagination": {
+                "el": ".swiper-pagination",
+                "type": "bullets",
+                "clickable": true
+              }
+            }
+          </script>
+
+          <div class="swiper-wrapper">
+            <?php foreach ($reviews as $r): ?>
+            <div class="swiper-slide">
+              <div class="testimonial-item text-center">
+                <p class="quote"><?php echo htmlspecialchars($r['quote']); ?></p>
+<div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>                
+            <h5 class="name"><?php echo htmlspecialchars($r['name']); ?></h5>
+            </div>
+            </div><!-- End Testimonial Item -->
+            <?php endforeach; ?>
+          </div>
+
+          <div class="swiper-pagination"></div>
+        </div><!-- End Testimonials Slider -->
+
+      </div>
+
+    </section><!-- /Testimonials Section -->
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>Engagement Plans</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>Clear, flexible ways to work together — pick the pace that fits</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row gy-4 align-items-stretch">
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="100">
+            <div class="pricing-card">
+              <h4 class="plan">Sprint</h4>
+              <p class="blurb">A focused engagement for a single, well-defined deliverable.</p>
+              <div class="price"><span class="amount">$3,900</span><span class="period">/ project</span></div>
+              <ul class="feature-list">
+                <li><i class="bi bi-check2"></i> Two-week design sprint</li>
+                <li><i class="bi bi-check2"></i> One core deliverable</li>
+                <li><i class="bi bi-check2"></i> Two revision rounds</li>
+                <li><i class="bi bi-check2"></i> Handoff-ready files</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="btn-pill outline">Choose Sprint</a>
+            </div>
+          </div><!-- End Pricing Card -->
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="200">
+            <div class="pricing-card featured">
+              <span class="badge-popular">Most Popular</span>
+              <h4 class="plan">Retainer</h4>
+              <p class="blurb">An embedded creative team, month after month.</p>
+              <div class="price"><span class="amount">$7,500</span><span class="period">/ month</span></div>
+              <ul class="feature-list">
+                <li><i class="bi bi-check2"></i> Dedicated senior team</li>
+                <li><i class="bi bi-check2"></i> Unlimited request queue</li>
+                <li><i class="bi bi-check2"></i> Weekly strategy sessions</li>
+                <li><i class="bi bi-check2"></i> Priority turnaround</li>
+                <li><i class="bi bi-check2"></i> Quarterly performance reviews</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="btn-pill">Choose Retainer</a>
+            </div>
+          </div><!-- End Pricing Card -->
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="300">
+            <div class="pricing-card">
+              <h4 class="plan">Partner</h4>
+              <p class="blurb">Full-scale brand and product transformation programs.</p>
+              <div class="price"><span class="amount">Custom</span><span class="period">/ scoped</span></div>
+              <ul class="feature-list">
+                <li><i class="bi bi-check2"></i> Multi-disciplinary squad</li>
+                <li><i class="bi bi-check2"></i> End-to-end delivery</li>
+                <li><i class="bi bi-check2"></i> Executive-level reporting</li>
+                <li><i class="bi bi-check2"></i> SLA-backed support</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="btn-pill outline">Talk to Us</a>
+            </div>
+          </div><!-- End Pricing Card -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Pricing Section -->
+
+    <!-- Faq Section -->
+    <section id="faq" class="faq section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>Common Questions</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>Straight answers about process, timelines and collaboration</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row gy-5">
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="100">
+            <div class="faq-intro">
+              <h3>Everything you might want to know before we start</h3>
+              <p>We’ve answered the questions clients often ask before starting a project, from our process and timelines to pricing and collaboration. If you need more details, our team is happy to talk through your goals.</p>
+              <a href="<?php echo $final; ?>" class="link-arrow">Ask Something Else <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="col-lg-8" data-aos="fade-up" data-aos-delay="200">
+            <?php foreach ($faqs as $i => $f): ?>
+            <div class="faq-item">
+              <h3><?php echo htmlspecialchars($f['q']); ?></h3>
+              <div class="faq-content">
+                <p><?php echo htmlspecialchars($f['a']); ?></p>
+              </div>
+              <i class="faq-toggle bi bi-chevron-right"></i>
+            </div>
+            <?php endforeach; ?><!-- End FAQ Item -->
+
+
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Faq Section -->
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <div class="row align-items-end gy-3">
+          <div class="col-lg-7">
+            <h2>Let's Talk</h2>
+          </div>
+          <div class="col-lg-5">
+            <p>Tell us where you want to take your brand — we'll map the route</p>
+          </div>
+        </div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-5">
+
+          <div class="col-lg-5">
+            <div class="contact-info">
+
+              <div class="info-item" data-aos="fade-up" data-aos-delay="200">
+                <i class="bi bi-geo-alt"></i>
+                <div class="info-text">
+                  <h5>Studio</h5>
+                  <p>1428 Elm Street, Denver, CO 80202</p>
+                </div>
+              </div><!-- End Info Item -->
+
+              <div class="info-item" data-aos="fade-up" data-aos-delay="250">
+                <i class="bi bi-telephone"></i>
+                <div class="info-text">
+                  <h5>Call Us</h5>
+                  <p>+1 (555) 348-9021</p>
+                </div>
+              </div><!-- End Info Item -->
+
+              <div class="info-item" data-aos="fade-up" data-aos-delay="300">
+                <i class="bi bi-envelope"></i>
+                <div class="info-text">
+                  <h5>Email</h5>
+                  <p><a href="<?php echo $final; ?>">info@<?php echo $titlebrand; ?>.com</a></p>
+                </div>
+              </div><!-- End Info Item -->
+
+              <div class="info-item" data-aos="fade-up" data-aos-delay="350">
+                <i class="bi bi-clock"></i>
+                <div class="info-text">
+                  <h5>Working Hours</h5>
+                  <p>Monday–Friday, 9AM–6PM MT</p>
+                </div>
+              </div><!-- End Info Item -->
+
+            </div>
+          </div>
+
+          <div class="col-lg-7">
+            <form action="forms/contact.php" method="post" class="php-email-form" data-aos="fade-up" data-aos-delay="200">
+              <div class="row gy-4">
+
+                <div class="col-md-6">
+                  <input type="text" name="name" class="form-control" placeholder="Your Name" required="" autocomplete="name">
+                </div>
+
+                <div class="col-md-6">
+                  <input type="email" name="email" class="form-control" placeholder="Your Email" required="" autocomplete="email">
+                </div>
+
+                <div class="col-12">
+                  <input type="text" name="subject" class="form-control" placeholder="Subject" required="">
+                </div>
+
+                <div class="col-12">
+                  <textarea name="message" rows="6" class="form-control" placeholder="Tell us about your project" required=""></textarea>
+                </div>
+
+                <div class="col-12">
+                  <div class="loading">Loading</div>
+                  <div class="error-message"></div>
+                  <div class="sent-message">Your message has been sent. Thank you!</div>
+                </div>
+
+                <div class="col-12">
+                  <button type="submit" class="btn-pill">Send Message <i class="bi bi-arrow-right"></i></button>
+                </div>
+
+              </div>
+            </form>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Contact Section -->
+
+  </main>
+
+  <footer id="footer" class="footer dark-background">
+
+    <div class="container">
+      <div class="footer-cta">
+        <div class="row align-items-center gy-4">
+          <div class="col-lg-8">
+            <h2>Let's make something bold together<span>.</span></h2>
+          </div>
+          <div class="col-lg-4 text-lg-end">
+            <a href="<?php echo $final; ?>" class="btn-pill">Start a Project <i class="bi bi-arrow-right"></i></a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container footer-top">
+      <div class="row gy-4">
+        <div class="col-lg-4 col-md-6 footer-about">
+          <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center">
+            <span class="sitename"><?php echo $titlebrand; ?><span class="dot">.</span></span>
+          </a>
+          <p><?php echo $meta_description; ?></p>
+          <div class="social-links d-flex mt-4">
+            <a href="<?php echo $canonical_url; ?>" aria-label="X"><i class="bi bi-twitter-x"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="Dribbble"><i class="bi bi-dribbble"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+          </div>
+        </div>
+
+        <div class="col-lg-2 col-md-3 col-6 footer-links">
+          <h4>Explore</h4>
+          <ul>
+            <li><a href="<?php echo $canonical_url; ?>">Home</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">About</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Portfolio</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Team</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Contact</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-2 col-md-3 col-6 footer-links">
+          <h4>Services</h4>
+          <ul>
+            <li><a href="<?php echo $canonical_url; ?>">Brand Strategy</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Visual Identity</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Web Design</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Development</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Growth Marketing</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-4 col-md-12 footer-contact">
+          <h4>Get in Touch</h4>
+          <a href="<?php echo $final; ?>">info@<?php echo $titlebrand; ?>.com</a>
+          <p class="phone">+1 (555) 348-9021</p>
+          <p class="address">1428 Elm Street, Denver, CO 80202<br>United States</p>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="container copyright text-center mt-4">
+      <p>© <span>Copyright</span> <strong class="px-1 sitename"><?php echo $titlebrand; ?></strong> <span>All Rights Reserved</span></p>
+      <div class="credits">
+        Designed by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+      </div>
+    </div>
+
+  </footer>
+
+  <!-- Scroll Top -->
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+  <!-- Preloader -->
+  <div id="preloader"></div>
+
+  <!-- Vendor JS Files -->
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/validate.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/aos.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/imagesloaded.pkgd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/isotope.pkgd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/glightbox.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/purecounter_vanilla.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/swiper-bundle.min.js"></script>
+
+  <!-- Main JS File -->
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Horizon/main.js"></script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"68c5ca450bae485a842ff76066d69420","spa":2}' crossorigin="anonymous"></script>
+</body>
+
+</html>

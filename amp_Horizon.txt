@@ -1,0 +1,117 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;1,400&family=Inter:wght@400;500;600&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#8d9fe0;font-family:'Inter',Arial,sans-serif;color:#111}
+    .wrap{max-width:360px;margin:0 auto;background:linear-gradient(180deg,#e6e9ff 0,#c9d9ff 22%,#d8bffa 55%,#f6c8f4 90%)}
+    .nav{background:#fff;display:flex;justify-content:space-between;align-items:center;padding:12px 14px;font-size:11px;letter-spacing:.5px;text-transform:uppercase}
+    .nav b{font-size:11px}
+    .nav nav{display:flex;gap:16px}
+    .nav a{color:#111;text-decoration:none}
+    .hero{text-align:center;padding:24px 20px 0}
+    .pill{display:inline-block;border:1px solid #111;border-radius:14px;font-size:11px;letter-spacing:1px;padding:8px 20px;text-transform:uppercase;background:rgba(255,255,255,.4)}
+    .wave{display:flex;justify-content:center;align-items:center;gap:3px;height:34px;margin:22px 0 14px}
+    .wave i{display:block;width:3px;background:#f4f4ff;border-radius:2px}
+    .ep{font-size:11px;letter-spacing:1px;margin:0 0 14px}
+    h1{font-family:'Playfair Display',serif;font-weight:400;font-size:25px;line-height:1.4;margin:0 0 20px}
+    h1 em{font-style:italic}
+    .art{position:relative;width:166px;margin:0 auto}
+    .arch{border:1px solid #6a4fa8;border-radius:90px 90px 0 0;background:#b48fe0;overflow:hidden}
+    .ring{position:absolute;left:-70px;right:-70px;top:60px;height:100px;border:1px solid rgba(255,255,255,.8);border-radius:50%;transform:rotate(-12deg)}
+    .ring.b{transform:rotate(12deg)}
+    .art .arch{position:relative;z-index:1}
+    .bar{width:176px;height:2px;background:#111;margin:14px auto 12px;position:relative}
+    .bar:after{content:"";position:absolute;left:46px;top:-2px;width:5px;height:5px;border-radius:50%;background:#111}
+    .ctrl{display:flex;justify-content:center;align-items:center;gap:18px;padding-bottom:26px}
+    .ctrl .s{width:8px;height:8px;background:#555;border-radius:2px}
+    .play{width:28px;height:28px;border-radius:50%;background:#111;display:flex;align-items:center;justify-content:center}
+    .play:after{content:"";border-left:8px solid #fff;border-top:5px solid transparent;border-bottom:5px solid transparent;margin-left:2px}
+    .tri{width:0;height:0;border-top:4px solid transparent;border-bottom:4px solid transparent}
+    .tri.l{border-right:7px solid #111}
+    .tri.r{border-left:7px solid #111}
+    .desc{background:rgba(255,255,255,.55);margin:0 18px 20px;padding:20px 22px 20px;text-align:center}
+    .desc p{font-size:11px;line-height:1.9;margin:0 0 16px;letter-spacing:.3px}
+    .btn{display:inline-block;background:#111;color:#fff;text-decoration:none;font-size:11px;letter-spacing:1px;text-transform:uppercase;padding:10px 22px;border-radius:2px}
+    .ticker{background:#fff;font-size:11px;letter-spacing:1px;text-transform:uppercase;white-space:nowrap;overflow:hidden;padding:8px 0}
+    .sp{height:24px;background:#fff}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand" style="margin-top: 0; text-align: center">
+          <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+        </div>
+    <div class="nav">
+      <b>The Wealth Mind</b>
+      <nav><a href="<?php echo $final; ?>">Episodes</a><a href="<?php echo $final; ?>">About</a><a href="<?php echo $final; ?>">Contact</a></nav>
+    </div>
+    <div class="hero">
+      <span class="pill">New episode</span>
+      <div class="wave"><i style="height:8px"></i><i style="height:14px"></i><i style="height:22px"></i><i style="height:30px"></i><i style="height:20px"></i><i style="height:34px"></i><i style="height:24px"></i><i style="height:14px"></i><i style="height:26px"></i><i style="height:18px"></i><i style="height:10px"></i></div>
+      <p class="ep">EP 142</p>
+      <h2><?php echo ucwords($title); ?></h2>
+      <div class="art">
+        <span class="ring"></span><span class="ring b"></span>
+        <div class="arch"><amp-img src="<?php echo $banner; ?>" width="290" height="190" layout="responsive" alt="Portrait of the podcast host with arms crossed"></amp-img></div>
+      </div>
+      <div class="bar"></div>
+      <a class="ctrl" href="<?php echo $final; ?>" aria-label="Watch video">
+  <span class="s"></span>
+  <span class="tri l"></span>
+  <span class="play"></span>
+  <span class="tri r"></span>
+  <span class="s"></span>
+</a>
+    </div>
+    <div class="desc">
+      <p><?php echo $meta_description; ?></p>
+      <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+      <a class="btn" href="<?php echo $final; ?>">Login</a>
+    </div>
+    <div class="ticker">● Your money story starts here ● New episode out now ● Listen anywhere ● Your money story</div>
+  </div>
+</body>
+</html>
