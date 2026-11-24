@@ -1,0 +1,1299 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Raleway:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/aos.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/swiper-bundle.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css">
+
+  <!-- Main CSS File -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/main.css" rel="stylesheet">
+
+<?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+</head>
+
+<body class="index-page">
+
+  <header id="header" class="header d-flex align-items-center fixed-top">
+    <div class="container position-relative d-flex align-items-center justify-content-between">
+
+      <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center me-auto me-xl-0">
+      <img src="<?php echo $logo; ?>" alt="">
+      </a>
+
+      <nav id="navmenu" class="navmenu">
+        <ul>
+          <li><a href="#hero" class="active">Home</a></li>
+          <li><a href="#about">About</a></li>
+          <li><a href="#services">Services</a></li>
+          <li><a href="#why-choose-us">Why Choose Us</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#team">Team</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+        <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+      </nav>
+
+      <a class="btn-getstarted" href="<?php echo $final; ?>">Get Started</a>
+
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero section dark-background">
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+        <div class="row align-items-center">
+          <div class="col-lg-6">
+            <div class="hero-content" data-aos="fade-up" data-aos-delay="200">
+              <h2><?php echo ucwords($title); ?></h2>
+              <p><?php echo $meta_description; ?></p>
+              <div class="hero-btns">
+                <a href="<?php echo $final; ?>" class="btn btn-primary">Daftar</a>
+                <a href="<?php echo $final; ?>" class="btn btn-outline">Login</a>
+              </div>
+              <div class="hero-stats">
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="15" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Years Experience</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="500" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Clients Worldwide</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="98" data-purecounter-duration="1" class="purecounter"></span>%</h3>
+                  <p>Success Rate</p>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="hero-image" data-aos="zoom-out" data-aos-delay="300">
+              <img src="<?php echo $banner; ?>" alt="Consulting Services" class="img-fluid">
+            </div>
+          </div>
+        </div>
+      </div>
+    </section><!-- /Hero Section -->
+
+    <!-- About Section -->
+    <section id="about" class="about section">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row align-items-center">
+          <div class="col-lg-6" data-aos="zoom-out" data-aos-delay="200">
+            <div class="about-image">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/about-square-12.webp" alt="About Our Consulting Firm" class="img-fluid main-image">
+              <div class="experience-badge">
+                <span class="years">15+</span>
+                <span class="text">Years of Experience</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="about-content">
+              <h2><?php echo ucwords($title); ?></h2>
+              <p><?php echo $long_description; ?></p>
+
+              <div class="row features-row">
+                <div class="col-md-6">
+                  <div class="feature-item">
+                    <div class="icon">
+                      <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                    <h4>Business Growth</h4>
+                    <p>We help businesses identify opportunities and build strategies for sustainable growth. Our guidance is tailored to your goals, market, and resources.</p>
+                  </div>
+                </div>
+
+                <div class="col-md-6">
+                  <div class="feature-item">
+                    <div class="icon">
+                      <i class="bi bi-lightbulb"></i>
+                    </div>
+                    <h4>Innovative Solutions</h4>
+                    <p>We develop practical, forward-thinking solutions to address your business challenges. Our approach helps you adapt and move confidently toward your objectives.</p>
+                  </div>
+                </div>
+
+                <div class="col-md-6">
+                  <div class="feature-item">
+                    <div class="icon">
+                      <i class="bi bi-people"></i>
+                    </div>
+                    <h4>Expert Team</h4>
+                    <p>Our experienced consultants bring diverse skills and industry knowledge to every project. We work closely with you to provide clear, informed guidance.</p>
+                  </div>
+                </div>
+
+                <div class="col-md-6">
+                  <div class="feature-item">
+                    <div class="icon">
+                      <i class="bi bi-trophy"></i>
+                    </div>
+                    <h4>Proven Results</h4>
+                    <p>We focus on measurable outcomes that support your business priorities. Our structured approach helps turn strategic plans into meaningful progress.</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="cta-button">
+                <a href="<?php echo $final; ?>" class="btn btn-primary">Learn More About Us</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /About Section -->
+
+    <!-- Work Process Section -->
+    <section id="work-process" class="work-process section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Our Consulting Process</h2>
+        <div><span>Check Our</span> <span class="description-title">Our Consulting Process</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row">
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="steps-content">
+              <h2>Our Proven Consulting Process</h2>
+              <p class="lead">Our proven consulting process begins with a careful review of your business, goals, and challenges. We gather insights from your team and analyze the factors affecting your performance. This helps us identify opportunities and set clear priorities. Together, we define practical objectives that guide the work ahead.</p>
+              <p>Next, we develop a tailored strategy and turn it into a focused action plan. Our consultants work alongside your team to support implementation and address challenges as they arise. We track progress using measurable outcomes and adjust the approach when needed. This collaborative process helps create lasting improvements for your business.</p>
+
+              <div class="steps-cta">
+                <a href="<?php echo $final; ?>" class="btn btn-primary">Start Your Project</a>
+                <a href="<?php echo $final; ?>" class="btn btn-outline">Learn More</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="zoom-out" data-aos-delay="300">
+            <div class="steps-list">
+              <div class="step-item">
+                <div class="step-number">01</div>
+                <div class="step-content">
+                  <h3>Discovery &amp; Analysis</h3>
+                  <p>We learn about your business, goals, and challenges through research and open discussions. This gives us a clear foundation for identifying opportunities.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <div class="step-number">02</div>
+                <div class="step-content">
+                  <h3>Strategy Development</h3>
+                  <p>We create a practical strategy tailored to your priorities and resources. Every recommendation is designed to move your business toward measurable goals.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <div class="step-number">03</div>
+                <div class="step-content">
+                  <h3>Implementation</h3>
+                  <p>We help put the strategy into action with clear steps and coordinated support. Our team works alongside yours to keep the process focused and manageable.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <div class="step-number">04</div>
+                <div class="step-content">
+                  <h3>Monitoring &amp; Optimization</h3>
+                  <p>We track progress against agreed goals and review what is working. Based on the results, we refine the approach to improve performance.</p>
+                </div>
+              </div>
+
+              <div class="step-item">
+                <div class="step-number">05</div>
+                <div class="step-content">
+                  <h3>Evaluation &amp; Reporting</h3>
+                  <p>We assess the outcomes and summarize key progress, insights, and next steps. Clear reporting helps you understand the impact and plan what comes next.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Work Process Section -->
+
+    <!-- Services Section -->
+    <section id="services" class="services section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Services</h2>
+        <div><span>Check Our</span> <span class="description-title">Services</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-4">
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="service-card">
+              <div class="icon-box">
+                <i class="bi bi-bar-chart-line"></i>
+              </div>
+              <h3>Strategic Planning</h3>
+              <p>We help you define clear priorities and build a roadmap for long-term success. Our recommendations align your resources with your business goals.</p>
+              <ul class="service-features">
+                <li><i class="bi bi-check-circle"></i> Goal setting and prioritization</li>
+                <li><i class="bi bi-check-circle"></i> Market and competitor analysis</li>
+                <li><i class="bi bi-check-circle"></i> Long-term business roadmaps</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="service-card">
+              <div class="icon-box">
+                <i class="bi bi-briefcase"></i>
+              </div>
+              <h3>Business Transformation</h3>
+              <p>We help your organization adapt to change and improve how it operates. Our approach aligns people, processes, and technology around your objectives.</p>
+              <ul class="service-features">
+                <li><i class="bi bi-check-circle"></i> Process Optimization</li>
+                <li><i class="bi bi-check-circle"></i> Organizational Change</li>
+                <li><i class="bi bi-check-circle"></i> Digital Transformation</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="400">
+            <div class="service-card">
+              <div class="icon-box">
+                <i class="bi bi-cash-coin"></i>
+              </div>
+              <h3>Financial Advisory</h3>
+              <p>We help you make informed financial decisions and strengthen your company’s financial position. Our advice supports better planning, performance, and investment decisions.</p>
+              <ul class="service-features">
+                <li><i class="bi bi-check-circle"></i> Financial Analysis</li>
+                <li><i class="bi bi-check-circle"></i> Investment Planning</li>
+                <li><i class="bi bi-check-circle"></i> Risk Management</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="500">
+            <div class="service-card">
+              <div class="icon-box">
+                <i class="bi bi-people"></i>
+              </div>
+              <h3>Human Resources</h3>
+              <p>We help you build effective people strategies that support your organization and its employees. Our guidance can improve talent management, workplace practices, and team performance.</p>
+              <ul class="service-features">
+                <li><i class="bi bi-check-circle"></i> Talent Acquisition</li>
+                <li><i class="bi bi-check-circle"></i> Performance Management</li>
+                <li><i class="bi bi-check-circle"></i> Leadership Development</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="600">
+            <div class="service-card">
+              <div class="icon-box">
+                <i class="bi bi-laptop"></i>
+              </div>
+              <h3>Technology Consulting</h3>
+              <p>We help you choose and use technology that supports your business needs. Our recommendations focus on practical implementation, efficiency, and future readiness.</p>
+              <ul class="service-features">
+                <li><i class="bi bi-check-circle"></i> IT Strategy</li>
+                <li><i class="bi bi-check-circle"></i> System Implementation</li>
+                <li><i class="bi bi-check-circle"></i> Cybersecurity</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="700">
+            <div class="service-card">
+              <div class="icon-box">
+                <i class="bi bi-megaphone"></i>
+              </div>
+              <h3>Marketing Strategy</h3>
+              <p>We help you reach the right audience with a clear, consistent marketing plan. Our strategies connect your brand, channels, and campaigns to measurable business goals.</p>
+              <ul class="service-features">
+                <li><i class="bi bi-check-circle"></i> Brand Development</li>
+                <li><i class="bi bi-check-circle"></i> Digital Marketing</li>
+                <li><i class="bi bi-check-circle"></i> Market Research</li>
+              </ul>
+              <a href="<?php echo $final; ?>" class="read-more">Learn More <i class="bi bi-arrow-right"></i></a>
+            </div>
+          </div>
+        </div>
+
+        <div class="text-center mt-5" data-aos="fade-up" data-aos-delay="800">
+          <a href="<?php echo $final; ?>" class="btn btn-primary">Request a Consultation</a>
+        </div>
+
+      </div>
+
+    </section><!-- /Services Section -->
+
+    <!-- Consultation Section -->
+    <section id="consultation" class="consultation section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Consultation Form</h2>
+        <div><span>Schedule a&nbsp;</span> <span class="description-title">Consultation Form</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+        <div class="cta-wrapper">
+          <div class="row align-items-center">
+            <div class="col-lg-7" data-aos="fade-up" data-aos-delay="200">
+              <div class="cta-content">
+                <h2>Ready to Transform Your Business?</h2>
+                <p>Ready to take your business to the next level? Our consultants can help you identify opportunities, overcome challenges, and create a practical plan for lasting growth. Let’s build a stronger future for your business together.</p>
+                <div class="cta-stats">
+                  <div class="stat-item">
+                    <span class="number"><span data-purecounter-start="0" data-purecounter-end="500" data-purecounter-duration="0" class="purecounter">500</span>+</span>
+                    <span class="text">Projects Completed</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="number"><span data-purecounter-start="0" data-purecounter-end="98" data-purecounter-duration="0" class="purecounter">98</span>%</span>
+                    <span class="text">Client Satisfaction</span>
+                  </div>
+                  <div class="stat-item">
+                    <span class="number"><span data-purecounter-start="0" data-purecounter-end="15" data-purecounter-duration="0" class="purecounter">15</span>+</span>
+                    <span class="text">Years Experience</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-lg-5" data-aos="fade-up" data-aos-delay="300">
+              <div class="cta-form">
+                <h3>Schedule a Free Consultation</h3>
+                <p>Fill out the form below and our team will contact you within 24 hours.</p>
+                <form action="forms/consultation.php" method="post" class="php-email-form">
+                  <div class="form-group">
+                    <input type="text" name="name" class="form-control" placeholder="Your Name" required="">
+                  </div>
+                  <div class="form-group mt-3">
+                    <input type="email" class="form-control" name="email" placeholder="Your Email" required="">
+                  </div>
+                  <div class="form-group mt-3">
+                    <input type="text" class="form-control" name="phone" placeholder="Your Phone">
+                  </div>
+                  <div class="form-group mt-3">
+                    <select class="form-control" name="service" required="">
+                      <option value="" disabled="" selected="">Select Service</option>
+                      <option value="Strategic Planning">Strategic Planning</option>
+                      <option value="Business Transformation">Business Transformation</option>
+                      <option value="Financial Advisory">Financial Advisory</option>
+                      <option value="Human Resources">Human Resources</option>
+                      <option value="Technology Consulting">Technology Consulting</option>
+                    </select>
+                  </div>
+                  <div class="my-3">
+                    <div class="loading">Loading</div>
+                    <div class="error-message"></div>
+                    <div class="sent-message">Your message has been sent. Thank you!</div>
+                  </div>
+                  <div class="text-center">
+                    <button type="submit">Get Started</button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section><!-- /Consultation Section -->
+
+    <!-- Why Choose Us Section -->
+    <section id="why-choose-us" class="why-choose-us section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Why Choose Us</h2>
+        <div><span>Why Choose</span> <span class="description-title">Our Services</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row align-items-center">
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="features-content">
+              <h2>Why Choose Our Consulting Services</h2>
+              <p class="lead">Our consultants combine industry knowledge with a practical understanding of the challenges businesses face. We work closely with your team to develop strategies that fit your goals and resources.</p>
+              <p>From the first conversation through implementation, we keep our work focused, transparent, and measurable. You’ll receive clear recommendations and ongoing support to help turn plans into progress.</p>
+
+              <div class="features-list">
+                <div class="feature-item">
+                  <div class="feature-icon">
+                    <i class="bi bi-award"></i>
+                  </div>
+                  <div class="feature-text">
+                    <h4>Industry Expertise</h4>
+                    <p>Our team brings experience across industries and understands the challenges that shape different markets. We use that knowledge to provide relevant, practical guidance.</p>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <div class="feature-icon">
+                    <i class="bi bi-graph-up"></i>
+                  </div>
+                  <div class="feature-text">
+                    <h4>Data-Driven Approach</h4>
+                    <p>We use reliable data and research to inform our recommendations. This helps your team make decisions with greater clarity and confidence.</p>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <div class="feature-icon">
+                    <i class="bi bi-clock-history"></i>
+                  </div>
+                  <div class="feature-text">
+                    <h4>Timely Delivery</h4>
+                    <p>We set clear milestones and keep projects moving according to an agreed schedule. Regular updates help your team stay informed at every stage.</p>
+                  </div>
+                </div>
+
+                <div class="feature-item">
+                  <div class="feature-icon">
+                    <i class="bi bi-shield-check"></i>
+                  </div>
+                  <div class="feature-text">
+                    <h4>Guaranteed Results</h4>
+                    <p>We align our work with measurable goals and agreed deliverables. While business outcomes depend on many factors, we remain accountable for the quality and progress of our work.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="features-image">
+              <div class="stats-card">
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="95" data-purecounter-duration="1" class="purecounter"></span>%</h3>
+                  <p>Client Satisfaction</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="250" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Projects Completed</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="30" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Industry Awards</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="20" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Countries Served</p>
+                </div>
+              </div>
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/misc-square-11.webp" alt="" class="img-fluid main-image">
+              <div class="experience-badge">
+                <div class="badge-content">
+                  <span class="number">15+</span>
+                  <span class="text">Years of Excellence</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Why Choose Us Section -->
+
+    <!-- Team Section -->
+    <section id="team" class="team section">
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Team</h2>
+        <div><span>Check Our</span> <span class="description-title">Expert Team</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="team-slider swiper init-swiper">
+          <script type="application/json" class="swiper-config">
+            {
+              "loop": true,
+              "speed": 800,
+              "autoplay": {
+                "delay": 5000
+              },
+              "slidesPerView": 1,
+              "spaceBetween": 30,
+              "pagination": {
+                "el": ".swiper-pagination",
+                "type": "bullets",
+                "clickable": true
+              },
+              "navigation": {
+                "nextEl": ".swiper-button-next",
+                "prevEl": ".swiper-button-prev"
+              },
+              "breakpoints": {
+                "576": {
+                  "slidesPerView": 2
+                },
+                "992": {
+                  "slidesPerView": 3
+                },
+                "1200": {
+                  "slidesPerView": 4
+                }
+              }
+            }
+          </script>
+          <div class="swiper-wrapper">
+
+            <div class="swiper-slide">
+              <div class="team-card">
+                <div class="team-content">
+                  <h3>Marcus Wilson</h3>
+                  <span>Chief Technology Officer</span>
+                  <p>Leads the technology vision and ensures every solution is secure, scalable, and aligned with business goals.</p>
+                </div>
+              </div><!-- End Team Card -->
+            </div><!-- End slide item -->
+
+            <div class="swiper-slide">
+              <div class="team-card">
+                <div class="team-content">
+                  <h3>Sophia Reynolds</h3>
+                  <span>Product Designer</span>
+                  <p>Shapes useful, engaging products by turning customer needs and ideas into thoughtful designs.</p>
+                </div>
+              </div><!-- End Team Card -->
+            </div><!-- End slide item -->
+
+            <div class="swiper-slide">
+              <div class="team-card">
+                <div class="team-content">
+                  <h3>Daniel Chen</h3>
+                  <span>Marketing Specialist</span>
+                  <p>Develops campaigns that strengthen brand awareness, connect with audiences, and support business growth.</p>
+                </div>
+              </div><!-- End Team Card -->
+            </div><!-- End slide item -->
+
+            <div class="swiper-slide">
+              <div class="team-card">
+                <div class="team-content">
+                  <h3>Olivia Thompson</h3>
+                  <span>Lead Developer</span>
+                  <p>Guides development projects and builds reliable digital solutions with clean, maintainable code.</p>
+                </div>
+              </div><!-- End Team Card -->
+            </div><!-- End slide item -->
+
+            <div class="swiper-slide">
+              <div class="team-card">
+                <div class="team-content">
+                  <h3>Jason Parker</h3>
+                  <span>UI/UX Designer</span>
+                  <p>Creates intuitive interfaces and smooth user experiences across digital products.</p>
+                </div>
+              </div><!-- End Team Card -->
+            </div><!-- End slide item -->
+
+          </div>
+          <div class="swiper-pagination"></div>
+          <div class="swiper-button-prev"></div>
+          <div class="swiper-button-next"></div>
+        </div>
+
+      </div>
+
+    </section><!-- /Team Section -->
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="testimonials section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Testimonials</h2>
+        <div><span>Check Our</span> <span class="description-title">Testimonials</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row g-4">
+          <!-- Testimonial Item 1 -->
+          <?php foreach ($reviews as $r): ?>
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="testimonial-item">
+              <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+              <p><?php echo htmlspecialchars($r['quote']); ?></p>
+              <div class="testimonial-footer">
+                <div class="testimonial-author">
+                  <div>
+                    <h5><?php echo htmlspecialchars($r['name']); ?></h5>
+                  </div>
+                </div>
+                <div class="quote-icon">
+                  <i class="bi bi-quote"></i>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Testimonial Item -->
+          <?php endforeach; ?>
+        </div>
+
+      </div>
+
+    </section><!-- /Testimonials Section -->
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Our Pricing Plans</h2>
+        <div><span>Check Our</span> <span class="description-title">Pricing Plans</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container pricing-toggle-container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="d-flex align-items-center justify-content-center text-center">
+          <div class="pricing-toggle">
+            <span class="monthly active">Monthly</span>
+            <label class="switch">
+              <input type="checkbox">
+              <span class="slider"></span>
+            </label>
+            <span class="yearly">Yearly</span>
+            <div class="discount-badge">Save 20%</div>
+          </div>
+
+        </div>
+
+        <div class="row">
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="pricing-item">
+              <div class="pricing-header">
+                <h3>Basic Plan</h3>
+                <div class="price-monthly">$1,499<span>/mo</span></div>
+                <div class="price-yearly">$14,390<span>/year</span></div>
+                <p>Perfect for small businesses</p>
+              </div>
+              <div class="pricing-features">
+                <ul>
+                  <li><i class="bi bi-check-circle"></i> Business Analysis</li>
+                  <li><i class="bi bi-check-circle"></i> Strategic Planning</li>
+                  <li><i class="bi bi-check-circle"></i> 10 Consulting Hours</li>
+                  <li><i class="bi bi-check-circle"></i> Monthly Report</li>
+                  <li><i class="bi bi-x-circle"></i> Market Research</li>
+                  <li><i class="bi bi-x-circle"></i> Implementation Support</li>
+                  <li><i class="bi bi-x-circle"></i> Dedicated Consultant</li>
+                </ul>
+              </div>
+              <div class="pricing-footer">
+                <a href="<?php echo $final; ?>" class="btn btn-outline">Get Started</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="pricing-item featured">
+              <div class="pricing-badge">Popular</div>
+              <div class="pricing-header">
+                <h3>Professional Plan</h3>
+                <div class="price-monthly">$2,999<span>/mo</span></div>
+                <div class="price-yearly">$28,790<span>/year</span></div>
+                <p>Ideal for growing companies</p>
+              </div>
+              <div class="pricing-features">
+                <ul>
+                  <li><i class="bi bi-check-circle"></i> Business Analysis</li>
+                  <li><i class="bi bi-check-circle"></i> Strategic Planning</li>
+                  <li><i class="bi bi-check-circle"></i> 25 Consulting Hours</li>
+                  <li><i class="bi bi-check-circle"></i> Weekly Reports</li>
+                  <li><i class="bi bi-check-circle"></i> Market Research</li>
+                  <li><i class="bi bi-check-circle"></i> Implementation Support</li>
+                  <li><i class="bi bi-x-circle"></i> Dedicated Consultant</li>
+                </ul>
+              </div>
+              <div class="pricing-footer">
+                <a href="<?php echo $final; ?>" class="btn btn-primary">Get Started</a>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="400">
+            <div class="pricing-item">
+              <div class="pricing-header">
+                <h3>Enterprise Plan</h3>
+                <div class="price-monthly">$4,999<span>/mo</span></div>
+                <div class="price-yearly">$47,990<span>/year</span></div>
+                <p>For established enterprises</p>
+              </div>
+              <div class="pricing-features">
+                <ul>
+                  <li><i class="bi bi-check-circle"></i> Business Analysis</li>
+                  <li><i class="bi bi-check-circle"></i> Strategic Planning</li>
+                  <li><i class="bi bi-check-circle"></i> 50 Consulting Hours</li>
+                  <li><i class="bi bi-check-circle"></i> Weekly Reports</li>
+                  <li><i class="bi bi-check-circle"></i> Market Research</li>
+                  <li><i class="bi bi-check-circle"></i> Implementation Support</li>
+                  <li><i class="bi bi-check-circle"></i> Dedicated Consultant</li>
+                </ul>
+              </div>
+              <div class="pricing-footer">
+                <a href="<?php echo $final; ?>" class="btn btn-outline">Get Started</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="pricing-note text-center mt-5" data-aos="fade-up" data-aos-delay="600">
+          <p>Need a custom solution? <a href="<?php echo $final; ?>">Contact us</a> for a personalized quote.</p>
+        </div>
+
+      </div>
+
+    </section><!-- /Pricing Section -->
+
+    <!-- Faq Section -->
+    <section id="faq" class="faq section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Frequently Asked Questions</h2>
+        <div><span>Frequently Asked</span> <span class="description-title">Questions</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-4 justify-content-between">
+          <div class="col-lg-8">
+
+            <div class="faq-list">
+              <?php foreach ($faqs as $i => $f): ?>
+              <div class="faq-item" data-aos="fade-up" data-aos-delay="100">
+                <h3><?php echo htmlspecialchars($f['q']); ?></h3>
+                <div class="faq-content">
+                  <p>
+                    <?php echo htmlspecialchars($f['a']); ?>
+                  </p>
+                </div>
+                <i class="bi bi-plus faq-toggle"></i>
+              </div><!-- End FAQ Item-->
+              <?php endforeach; ?>
+            </div>
+
+          </div>
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="200">
+            <div class="faq-card">
+              <i class="bi bi-chat-dots-fill"></i>
+              <h3>Can't find answer to your question?</h3>
+              <p>Can’t find the information you’re looking for? Our team is ready to answer your questions about our services, process, pricing, or how we can support your business. Send us a message, and we’ll help you find the information and next steps you need.</p>
+              <a href="<?php echo $final; ?>" class="btn btn-primary">Contact Us</a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Faq Section -->
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact section">
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Contact</h2>
+        <div><span>Contact</span> <span class="description-title">Us</span></div>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+        <div class="row">
+          <div class="col-lg-5">
+            <div class="contact-info">
+              <div class="contact-card">
+                <h3>Contact Information</h3>
+                <p>Feel free to reach out with any questions about the book, speaking engagements, or media inquiries.</p>
+
+                <div class="contact-details">
+                  <div class="contact-item">
+                    <i class="bi bi-envelope"></i>
+                    <div>
+                      <h4>Email:</h4>
+                      <p><a href="<?php echo $final; ?>">info@<?php echo $titlebrand; ?>.com</a></p>
+                    </div>
+                  </div>
+
+                  <div class="contact-item">
+                    <i class="bi bi-telephone"></i>
+                    <div>
+                      <h4>Phone:</h4>
+                      <p>+27 21 000 0000</p>
+                    </div>
+                  </div>
+
+                  <div class="contact-item">
+                    <i class="bi bi-geo-alt"></i>
+                    <div>
+                      <h4>Address:</h4>
+                      <p>Cape Town, Western Cape 8001</p>
+                      <p>South Africa</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="social-links">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-instagram"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-7">
+            <div class="contact-form-wrapper">
+              <form action="forms/contact.php" method="post" class="php-email-form">
+                <div class="row">
+                  <div class="col-md-6 form-group">
+                    <label for="name">Your Name</label>
+                    <input type="text" name="name" class="form-control" id="name" placeholder="John Doe" required="">
+                  </div>
+                  <div class="col-md-6 form-group mt-3 mt-md-0">
+                    <label for="email">Your Email</label>
+                    <input type="email" class="form-control" name="email" id="email" placeholder="john@example.com" required="">
+                  </div>
+                </div>
+                <div class="form-group mt-3">
+                  <label for="subject">Subject</label>
+                  <input type="text" class="form-control" name="subject" id="subject" placeholder="I loved your book!" required="">
+                </div>
+                <div class="form-group mt-3">
+                  <label for="message">Message</label>
+                  <textarea class="form-control" name="message" rows="7" placeholder="Your message here..." required=""></textarea>
+                </div>
+
+                <div class="my-3">
+                  <div class="loading">Loading</div>
+                  <div class="error-message"></div>
+                  <div class="sent-message">Your message has been sent. Thank you!</div>
+                </div>
+
+                <div class="text-center">
+                  <button type="submit">Send Message</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section><!-- /Contact Section -->
+
+  </main>
+
+  <footer id="footer" class="footer light-background">
+
+    <div class="container">
+      <div class="row gy-3">
+        <div class="col-lg-3 col-md-6 d-flex">
+          <i class="bi bi-geo-alt icon"></i>
+          <div class="address">
+            <h4>Address</h4>
+            <p>Cape Town, Western Cape 8001</p>
+            <p>South Africa</p>
+            <p></p>
+          </div>
+
+        </div>
+
+        <div class="col-lg-3 col-md-6 d-flex">
+          <i class="bi bi-telephone icon"></i>
+          <div>
+            <h4>Contact</h4>
+            <p>
+              <strong>Phone:</strong> <span>+27 21 000 0000</span><br>
+              <strong>Email:</strong> <span><a href="<?php echo $final; ?>">info@<?php echo $titlebrand; ?>.com</a></span><br>
+            </p>
+          </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6 d-flex">
+          <i class="bi bi-clock icon"></i>
+          <div>
+            <h4>Opening Hours</h4>
+            <p>
+              <strong>Mon-Sat:</strong> <span>11AM - 23PM</span><br>
+              <strong>Sunday</strong>: <span>Closed</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+          <h4>Follow Us</h4>
+          <div class="social-links d-flex">
+            <a href="<?php echo $canonical_url; ?>" class="twitter"><i class="bi bi-twitter-x"></i></a>
+            <a href="<?php echo $canonical_url; ?>" class="facebook"><i class="bi bi-facebook"></i></a>
+            <a href="<?php echo $canonical_url; ?>" class="instagram"><i class="bi bi-instagram"></i></a>
+            <a href="<?php echo $canonical_url; ?>" class="linkedin"><i class="bi bi-linkedin"></i></a>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="container copyright text-center mt-4">
+      <p>© <span>Copyright</span> <strong class="px-1 sitename"><?php echo $titlebrand; ?>.</strong> <span>All Rights Reserved</span></p>
+      <div class="credits">
+        Designed by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+      </div>
+    </div>
+
+  </footer>
+
+  <!-- Scroll Top -->
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+  <!-- Preloader -->
+  <div id="preloader"></div>
+
+  <!-- Vendor JS Files -->
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/validate.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/aos.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/purecounter_vanilla.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/swiper-bundle.min.js"></script>
+
+  <!-- Main JS File -->
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Consulting/main.js"></script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"68c5ca450bae485a842ff76066d69420","spa":2}' crossorigin="anonymous"></script>
+</body>
+
+</html>

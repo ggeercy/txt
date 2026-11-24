@@ -1,0 +1,2339 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!doctype html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+    <!-- ======= Custom/Google Font =======-->
+    <link href="https://api.fontshare.com/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet" />
+    <!-- End Google Font-->
+
+    <!-- ======= Styles =======-->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/aurora/bootstrap.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/aurora/bootstrap-icons.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/aurora/glightbox.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/aurora/swiper-bundle.min.css" rel="stylesheet" />
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/aurora/aos.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.13.2/font/bootstrap-icons.min.css" />
+    <!-- End Styles-->
+
+    <!-- ======= Theme Style =======-->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/aurora/onepage.css" rel="stylesheet" />
+    <!-- End Theme Style-->
+
+     <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    <style>
+
+      .navbar-brand .logo,
+.offcanvas-header-logo .logo {
+  display: block;
+  width: 120px;
+  max-width: 100%;
+  height: 36px;
+  object-fit: contain;
+}
+
+.review .author {
+  display: block ;
+  width: 90px;
+  max-width: 100%;
+  height: 36px;
+  object-fit: contain;
+  object-position: left center;
+  margin-top: 16px;
+}
+
+.accordion .accordion-collapse:not(.show):not(.collapsing) {
+  display: none !important;
+}
+
+.accordion-button::after {
+  content: "+";
+  width: auto;
+  height: auto;
+  background-image: none !important;
+  font-size: 22px;
+  line-height: 1;
+  transform: none;
+  margin-left: auto;
+}
+
+.accordion-button:not(.collapsed)::after {
+  content: "−";
+  background-image: none !important;
+  transform: none;
+}
+    </style>
+  </head>
+  <body>
+    <!-- ======= Site Wrap =======-->
+    <div class="site-wrap">
+      <!-- ======= Header =======-->
+      <header class="fbs__net-navbar navbar navbar-expand-lg" aria-label="<?php echo $titlebrand; ?> navbar">
+        <div class="container d-flex align-items-center justify-content-between">
+          <!-- Start Logo-->
+          <a class="navbar-brand w-auto" href="<?php echo $canonical_url; ?>"><img class="logo img-fluid" src="<?php echo $logo; ?>" alt="Site logo"></a>
+          <!-- End Logo-->
+
+          <!-- Start offcanvas-->
+          <div class="offcanvas offcanvas-start w-75" id="fbs__net-navbars" tabindex="-1" aria-labelledby="fbs__net-navbarsLabel" role="dialog">
+            <div class="offcanvas-header">
+              <div class="offcanvas-header-logo">
+                <a class="logo-link" id="fbs__net-navbarsLabel" href="<?php echo $canonical_url; ?>"><img class="logo img-fluid" src="<?php echo $logo; ?>" alt="Site logo"></a>
+              </div>
+              <button class="btn-close btn-close-black" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+
+            <div class="offcanvas-body align-items-lg-center">
+              <ul class="navbar-nav nav mx-auto pe-lg-3 mb-2 mb-lg-0">
+                <li class="nav-item dropdown">
+                  <a class="nav-link scroll-link dropdown-toggle" href="#" data-bs-toggle="dropdown" aria-expanded="false">Home<i class="bi bi-chevron-down"></i></a>
+                  <ul class="dropdown-menu">
+                    <li><a class="nav-link scroll-link dropdown-item" href="<?php echo $final; ?>">Mobile App</a></li>
+                    <li><a class="nav-link scroll-link dropdown-item" href="<?php echo $final; ?>">Web App</a></li>
+                  </ul>
+                </li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#hero">Home</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#about">About</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#pricing">Pricing</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#testimonials">Testimonials</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#faq">FAQ's</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#team">Team</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#blog">Blog</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#contact">Contact</a></li>
+              </ul>
+            </div>
+          </div>
+          <!-- End offcanvas-->
+
+          <div class="ms-auto w-auto">
+            <div class="header-social d-flex align-items-center gap-1">
+
+              <a class="btn btn-primary w-auto py-1" href="<?php echo $final; ?>">Contact</a>
+
+              <button
+                class="fbs__net-navbar-toggler justify-content-center align-items-center ms-auto"
+                data-bs-toggle="offcanvas"
+                data-bs-target="#fbs__net-navbars"
+                aria-controls="fbs__net-navbars"
+                aria-label="Toggle navigation"
+                aria-expanded="false"
+              >
+                <svg class="fbs__net-icon-menu" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="21" x2="3" y1="6" y2="6"></line>
+                  <line x1="15" x2="3" y1="12" y2="12"></line>
+                  <line x1="17" x2="3" y1="18" y2="18"></line>
+                </svg>
+                <svg class="fbs__net-icon-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </header>
+      <!-- End Header-->
+
+      <!-- ======= Main =======-->
+      <main>
+        <!-- ======= Hero =======-->
+        <section id="hero">
+        <div class="section first-section hero__v15 relative" id="home">
+          <div class="bg-svg-1"><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/hero-bg-svg-1.svg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+          <div class="container">
+            <div class="row align-items-center justify-content-between g-5">
+              <div class="col-lg-6 relative z-10">
+                <div class="row">
+                  <div class="col-lg-11 text-center text-lg-start">
+                    <h2 class="mb-4 fw-bold" data-aos="fade-up" data-aos-delay="">
+                      <?php echo ucwords($title); ?>
+                    </h2>
+                    <p class="mb-5 text-lead" data-aos="fade-up" data-aos-delay="50"><?php echo $meta_description; ?></p>
+                    <div class="d-flex gap-3 justify-content-center justify-content-lg-start mb-4 mb-md-5" data-aos="fade-up" data-aos-delay="100">
+                      <a class="btn btn-appvendor align-items-center d-flex gap-3" href="<?php echo $final; ?>"
+                        ><span class="app-icon pe-3"><i class="bi bi-apple"></i></span><span class="d-flex flex-column"><span>Daftar</span><span class="app-name">Apple Store</span></span></a
+                      ><a class="btn btn-appvendor align-items-center d-flex gap-3" href="<?php echo $final; ?>"
+                        ><span class="app-icon pe-3"><i class="bi bi-google-play"></i></span><span class="d-flex flex-column"><span>Login</span><span class="app-name">Google Play</span></span></a
+                      >
+                    </div>
+                    <div data-aos="fade-up" data-aos-delay="200">
+                      <a class="glightbox video-link d-inline-flex gap-2 align-items-center fw-bold" href="<?php echo $final; ?>">
+                        <span class="icon d-inline-flex align-items-center justify-content-center"><i class="bi bi-play-fill"></i></span><span>Watch the intro video</span></a
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-6 mb-5 mb-md-0">
+                <div class="d-flex justify-content-center justify-content-lg-end">
+                  <div class="device-container">
+                    <div data-aos="fade-left" data-aos-delay="50">
+                      <div class="device first">
+                        <div><img class="img-fluid" src="<?php echo $banner; ?>" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                      </div>
+                    </div>
+                    <div data-aos="fade-right" data-aos-delay="50">
+                      <div class="device second">
+                        <div><img class="img-fluid" src="<?php echo $banner; ?>" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section> 
+        <!-- End Hero-->
+
+        <!-- ======= Reviews =======-->
+        <div class="section testimonials__v9" id="reviews">
+          <div class="container">
+            <div class="row g-5">
+              <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="0">
+                <div class="review">
+                  <div class="d-flex gap-2 stars mb-3"><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"></i></div>
+                  <p class="mb-0">This app has a clean design and is incredibly easy to use — it made organizing my tasks so much smoother.</p>
+                  <img class="mw-100 author js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-air-bnb__black.svg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="review">
+                  <div class="d-flex gap-2 stars mb-3"><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"></i></div>
+                  <p class="mb-0">I noticed a big boost in my productivity within days of using this app; it's fast, simple, and really effective.</p>
+                  <img class="mw-100 author js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-uber__black.svg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="review">
+                  <div class="d-flex gap-2 stars mb-3"><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-fill"> </i><i class="bi bi-star-half"></i></div>
+                  <p class="mb-0">All the features I need are packed into this one sleek app — it’s perfect for both work and personal use.</p>
+                  <img class="mw-100 author js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-netflix__black.svg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Reviews-->
+
+        <!-- ======= Content =======-->
+         <section id="about">
+        <div class="section content__v7 pt-0" id="content7">
+          <div class="container">
+            <div class="row justify-content-between align-items-center">
+              <div class="col-lg-6 order-lg-2 mb-5 mb-lg-0">
+                <div class="row">
+                  <div class="col-6" data-aos="fade-up" data-aos-delay="0">
+                    <div class="device">
+                      <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-4-min.jpg" alt="Mobile Screen 1" /></div>
+                    </div>
+                  </div>
+                  <div class="col-6" data-aos="fade-up" data-aos-delay="100">
+                    <div class="device">
+                      <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-2-min.jpg" alt="Mobile Screen 1" /></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-6">
+                <div class="row">
+                  <div class="col-md-10">
+                    <h2 class="mb-4 fw-bold" data-aos="fade-up" data-aos-delay="">
+                      <?php echo ucwords($title); ?>
+                    </h2>
+                    <p class="mb-5"><?php echo $long_description; ?></p>
+                    <div class="row g-4">
+                      <div class="check col-sm-6 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Smart Task Organization</span></div>
+                      <div class="check col-sm-6 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Real-Time Collaboration</span></div>
+                      <div class="check col-sm-6 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Deadline Reminders</span></div>
+                      <div class="check col-sm-6 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Progress Tracking</span></div>
+                      <div class="check col-sm-6 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Cross-Device Sync</span></div>
+                      <div class="check col-sm-6 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Customizable Workflows</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section>
+        <!-- End Content-->
+
+        <!-- ======= How It Works =======-->
+        <div class="section howitworks__v5" id="services">
+          <div class="container text-center">
+            <div class="row mb-4" data-aos="fade-up" data-aos-delay="0">
+              <div class="col-lg-5 mx-auto text-center">
+                <h2 class="fs-3 fw-bold mb-3">Work Made Easy</h2>
+                <p class="mb-5">Work Made Easy helps you organize projects, coordinate tasks, and keep your team moving forward. With clear workflows and simple collaboration tools, you can focus on delivering great results.</p>
+              </div>
+            </div>
+            <div class="row g-4">
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="0">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 682.667 682.667" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <defs>
+                          <clippath id="a1" clippathunits="userSpaceOnUse">
+                            <path d="M0 512h512V0H0Z" fill="currentColor" opacity="1" data-original="currentColor"></path>
+                          </clippath>
+                        </defs>
+                        <g clip-path="url(#a1)" transform="matrix(1.33333 0 0 -1.33333 0 682.667)">
+                          <path
+                            d="m0 0-143.317-143.317a51.975 51.975 0 0 0-22.176-13.137l-21.293-6.219c-13.975-4.083-26.944 8.887-22.862 22.862l6.22 21.293a51.97 51.97 0 0 0 13.136 22.175L-46.975 46.974c10.053 10.053 26.351 10.053 36.404 0L0 36.403C10.052 26.351 10.052 10.052 0 0Z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(476.935 170.936)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h184.152"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(91.374 58.05)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c-4.59 17.667-20.646 30.709-39.75 30.709h-268.692c-22.681 0-41.066-18.386-41.066-41.066v-364.317c0-18.408 12.111-33.987 28.799-39.204"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(377.034 473.79)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v272.039"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(378.351 166.301)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 23.452 23.451"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(346.183 87.159)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c0-14.007-11.355-25.362-25.362-25.362-14.006 0-25.361 11.355-25.361 25.362 0 14.007 11.355 25.361 25.361 25.361C-11.355 25.361 0 14.007 0 0Z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(136.355 154.488)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h121.859"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(191.387 154.488)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c0-14.007-11.355-25.361-25.362-25.361-14.006 0-25.361 11.354-25.361 25.361 0 14.007 11.355 25.362 25.361 25.362C-11.355 25.362 0 14.007 0 0Z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(136.355 249.286)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h121.859"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(191.387 249.286)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h121.859"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(191.387 344.084)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 17.62-17.62 44.142 44.142"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(80.112 346.115)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h-152.338c-10.995 0-19.908 8.914-19.908 19.909v17.327c0 10.995 8.913 19.909 19.908 19.909H0c10.995 0 19.908-8.914 19.908-19.909V19.909C19.908 8.914 10.995 0 0 0Z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(279.107 412.548)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0-43.846 43.846"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(321.503 18.633)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 46.975-46.974"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(406.396 194.346)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0-46.974 46.975"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(424.767 118.768)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                        </g>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Plan Your Workflow</h3>
+                  <p class="text-muted">Map out the steps needed to move each project forward. A clear workflow helps everyone understand what comes next.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 64 64" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <path
+                          d="M50.204 23.586a1 1 0 0 0-1.806.864c9.608 19.956-14.221 39.872-32.17 26.826C-4.454 35.893 14.09 3.82 37.687 14.01a1 1 0 0 0 .816-1.827c-22.13-9.95-43.208 16.857-28.261 36.025l-3.468 6.847a3.275 3.275 0 0 0-.114 2.672c1.067 2.881 5.568 3.049 6.91.351l2.435-4.546a23.605 23.605 0 0 0 25.778-.001l2.436 4.546c2.062 3.89 8.8 1.36 6.794-3.029l-3.442-6.87a23.615 23.615 0 0 0 2.633-24.593zM11.8 57.146c-.818 1.616-4.042.824-3.237-1.196l3.075-6.07a23.474 23.474 0 0 0 2.723 2.482zm37.422-1.2c.83 2.043-2.411 2.784-3.24 1.19l-2.557-4.775a23.476 23.476 0 0 0 2.748-2.503z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                        <path
+                          d="M37.131 21.348a1 1 0 0 0-.371-1.365 15.865 15.865 0 0 0-7.87-2.087c-21.037.87-21.037 30.87 0 31.739a15.888 15.888 0 0 0 15.87-15.87 15.713 15.713 0 0 0-2.414-8.403 1 1 0 1 0-1.693 1.069c5.811 8.987-1.045 21.35-11.763 21.203a13.88 13.88 0 0 1-13.859-13.869c-.183-10.447 11.774-17.377 20.735-12.045a1.002 1.002 0 0 0 1.365-.372z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                        <path
+                          d="M28.89 27.012a6.315 6.315 0 0 1 1.688.221 1 1 0 0 0 .51-1.935 8.777 8.777 0 0 0-10.942 8.467c.48 11.62 17.02 11.607 17.5 0-.097-1.129-.057-3.943-1.777-3.507a1 1 0 0 0-.605 1.279 6.605 6.605 0 0 1 .38 2.228 6.762 6.762 0 0 1-6.754 6.754c-8.932-.339-8.932-13.168 0-13.507z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                        <path
+                          d="M58.737 13.5a1.002 1.002 0 0 0-.77-.689l-5.639-1.068 1.71-1.71a1 1 0 0 0-1.414-1.415L51 10.241 49.98 4.815a1 1 0 0 0-1.69-.523l-6.653 6.642a.992.992 0 0 0-.289.733v8.228l-13.16 13.16a1 1 0 0 0 1.415 1.415l13.133-13.133h8.497a1.059 1.059 0 0 0 .713-.292l1.83-1.831a1 1 0 0 0-1.414-1.415l-1.537 1.537h-6.089l5.881-5.881 5.119.97-.533.533a1 1 0 0 0 1.415 1.414l1.87-1.87a1.003 1.003 0 0 0 .25-1.003zm-15.389 4.394v-5.841l5.015-5.007.924 4.909z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Set Priorities</h3>
+                  <p class="text-muted">Focus on the tasks that matter most to your goals. Clear priorities help your team use its time and resources effectively.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 64 64" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <path
+                          d="M10.003 43.32h43.994a3.875 3.875 0 0 0 3.963-3.772v-25.66a3.875 3.875 0 0 0-3.964-3.772c-12.74-.003-31.282.003-43.993 0a3.875 3.875 0 0 0-3.963 3.772v25.66a3.875 3.875 0 0 0 3.963 3.771zm29.72-31.204a3.083 3.083 0 0 1-2.789 1.867h-9.869a3.084 3.084 0 0 1-2.789-1.867zM8.04 13.888a1.877 1.877 0 0 1 1.964-1.772h11.975l.758 1.341a4.976 4.976 0 0 0 4.328 2.526h9.87a4.977 4.977 0 0 0 4.328-2.525l.758-1.342h11.976a1.877 1.877 0 0 1 1.963 1.772v25.66a1.877 1.877 0 0 1-1.964 1.771H10.003a1.877 1.877 0 0 1-1.963-1.771zM59 45.77h-9.57a1 1 0 0 0 0 2H58a3.782 3.782 0 0 1-3.74 4.11H9.74A3.782 3.782 0 0 1 6 47.77h18.482a3.185 3.185 0 0 0 2.928 2.2h9.18a3.184 3.184 0 0 0 2.928-2.2h5.912a1 1 0 0 0 0-2H38.9a1 1 0 0 0-.895.553c-.317.537-.604 1.704-1.415 1.647h-9.18a.963.963 0 0 1-.856-.527c-.32-.553-.618-1.732-1.454-1.673H5a1 1 0 0 0-1 1v1.37a5.747 5.747 0 0 0 5.74 5.74h44.52A5.747 5.747 0 0 0 60 48.14v-1.37a1 1 0 0 0-1-1z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                        <path
+                          d="M35.226 22.068a1.267 1.267 0 0 0 0-2.533 1.267 1.267 0 0 0 0 2.533zM39.244 21.8h13.602a1 1 0 0 0 0-2H39.244a1 1 0 0 0 0 2zM35.226 27.301a1.267 1.267 0 0 0 0-2.533 1.267 1.267 0 0 0 0 2.533zM39.244 27.034h6.184a1 1 0 1 0 0-2h-6.184a1 1 0 0 0 0 2zM35.226 32.534a1.267 1.267 0 0 0 0-2.533 1.267 1.267 0 0 0 0 2.533zM39.244 32.268h9.705a1 1 0 0 0 0-2h-9.705a1 1 0 0 0 0 2zM35.226 37.768a1.267 1.267 0 0 0 0-2.533 1.267 1.267 0 0 0 0 2.533zM39.244 37.501h13.602a1 1 0 0 0 0-2H39.244a1 1 0 0 0 0 2zM11.154 37.501h18.802a1 1 0 0 0 0-2h-.916V24.7a1 1 0 0 0-1-1h-3.99v-2.19a1 1 0 0 0-1-1h-4.99a1 1 0 0 0-1 1v6.95h-3.99a1 1 0 0 0-1 1v6.041h-.916a1 1 0 0 0 0 2zM19.06 22.51h2.99V28a1 1 0 0 0 2 0v-2.3h2.99v9.8h-2.99V32a1 1 0 0 0-2 0v3.5h-2.99zm-4.99 7.95h2.99v5.041h-2.99z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Track Your Progress</h3>
+                  <p class="text-muted">See how tasks and projects are progressing in one place. Regular updates help you spot delays and adjust plans early.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="300">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 64 64" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <path d="M32.384 48.893h5.76a1 1 0 0 0 0-2h-5.76a1 1 0 0 0 0 2zM30.531 50.903a1 1 0 0 0 1 1h7.467a1 1 0 0 0 0-2h-7.467a1 1 0 0 0-1 1z" fill="currentColor" opacity="1" data-original="currentColor"></path>
+                        <path
+                          d="M45.72 58.584h-.514v-1.729a2.112 2.112 0 0 0-1.466-2.002V50.91a1 1 0 0 0-2 0v3.83H28.79v-9.88a.806.806 0 0 1 .81-.8h11.33a.807.807 0 0 1 .81.8v1.93a1 1 0 1 0 2 0v-1.93a2.81 2.81 0 0 0-2.81-2.8h-2.436v-1.671h3.472a1 1 0 0 0 0-2h-.94V36.69a3.104 3.104 0 0 0-2.662-3.063c3.088-10.771-1.222-16.334-2.628-17.786.33-1.491 2.375-3.753 3.705-4.926a1.006 1.006 0 0 0-.709-1.749l-6.337.305-4.202-5.653a1.007 1.007 0 0 0-1.772.349L24.75 10.7l-6.831 2.654a1.007 1.007 0 0 0-.165 1.782l5.868 3.648.26 6.99a1.007 1.007 0 0 0 1.794.569c1.252-1.644 3.58-4.107 4.793-4.435.897.255 5.212 2.015 4.713 11.675h-2.57a3.112 3.112 0 0 0-3.108 3.108v1.698h-.94a1 1 0 0 0 0 2c.862-.003 2.62.002 3.472 0v1.67H29.6a2.809 2.809 0 0 0-2.81 2.801v9.993a2.111 2.111 0 0 0-1.467 2.002v1.729h-.514a1 1 0 1 0 0 2h20.91a1 1 0 0 0 0-2zM30.653 19.899c-1.678-.016-3.455 1.748-4.87 3.215L25.6 18.18a1.002 1.002 0 0 0-.472-.813l-4.62-2.873 5.444-2.115a.999.999 0 0 0 .607-.684l1.28-4.999 3.268 4.398a.978.978 0 0 0 .851.402l4.302-.207c-1.123 1.32-3.44 4.245-2.214 5.702.216.184 4.628 4.077 3.11 13.05-.722-9.066-6.234-10.097-6.503-10.14zm.85 16.792a1.11 1.11 0 0 1 1.109-1.108h5.305a1.11 1.11 0 0 1 1.11 1.108v1.698h-7.524zm4.991 3.698v1.667h-2.459v-1.667zm-9.171 18.195v-1.729a.116.116 0 0 1 .115-.115h15.653a.115.115 0 0 1 .115.115v1.729z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Achieve Your Goals</h3>
+                  <p class="text-muted">Turn your plans into manageable actions and steady progress. Keep your team focused on the outcomes you want to achieve.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="0">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 682.667 682.667" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <defs>
+                          <clippath id="a2" clippathunits="userSpaceOnUse">
+                            <path d="M0 512h512V0H0Z" fill="currentColor" opacity="1" data-original="currentColor"></path>
+                          </clippath>
+                        </defs>
+                        <path
+                          d="M0 0h-49.175"
+                          style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                          transform="matrix(1.33333 0 0 -1.33333 274.905 360.187)"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="15"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-miterlimit="10"
+                          stroke-dasharray="none"
+                          stroke-opacity=""
+                          data-original="currentColor"
+                        ></path>
+                        <path
+                          d="M0 0h-49.175"
+                          style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                          transform="matrix(1.33333 0 0 -1.33333 473.328 360.187)"
+                          fill="none"
+                          stroke="currentColor"
+                          stroke-width="15"
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          stroke-miterlimit="10"
+                          stroke-dasharray="none"
+                          stroke-opacity=""
+                          data-original="currentColor"
+                        ></path>
+                        <g clip-path="url(#a2)" transform="matrix(1.33333 0 0 -1.33333 0 682.667)">
+                          <path
+                            d="M0 0c.98 16.44 11.9 30.75 27.7 35.94l52.03 17.13"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(155.06 300.92)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 52.03-17.13c15.8-5.19 26.72-19.5 27.7-35.94"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(277.21 353.99)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-25.254C0-36.97-9.498-46.467-21.214-46.467s-21.214 9.497-21.214 21.213V0"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(277.214 379.24)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c0 26.779-21.709 48.488-48.488 48.488-26.78 0-48.489-21.709-48.489-48.488v-32.325c0-26.779 21.709-48.488 48.489-48.488C-21.709-80.813 0-59.104 0-32.325z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(304.488 456.012)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c2.431 14.66 12.79 27.02 27.23 31.78L79.26 48.9"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(303.01 136.39)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-10.09h-147.48"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(504.5 83.25)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 52.03-17.12C68.6-22.58 79.8-38.06 79.8-55.51v-11.494"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(424.7 185.29)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 52.029-17.12c14.441-4.76 24.8-17.12 27.231-31.78"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(129.73 185.29)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0H-147.48v10.09"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(154.98 73.16)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v11.494c0 17.45 11.2 32.93 27.77 38.39l52.03 17.12"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(7.5 118.286)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-25.254C0-36.97-9.498-46.467-21.214-46.467s-21.213 9.497-21.213 21.213V0"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(424.697 210.542)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c0 26.779-21.709 48.488-48.488 48.488-26.78 0-48.488-21.709-48.488-48.488v-32.325c0-26.779 21.709-48.488 48.488-48.488S0-59.104 0-32.325z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(451.972 287.315)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-26.264"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(462.073 99.425)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-25.254C0-36.97-9.497-46.467-21.213-46.467c-11.716 0-21.214 9.497-21.214 21.213V0"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(129.73 210.542)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c0 26.779-21.709 48.488-48.487 48.488-26.78 0-48.489-21.709-48.489-48.488v-32.325c0-26.779 21.709-48.488 48.489-48.488C-21.709-80.813 0-59.104 0-32.325z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(157.004 287.315)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-26.264"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(49.927 99.425)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-10.018H-202.033v81.877c0 17.449 11.201 32.927 27.775 38.382l52.028 17.123"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(357.017 17.518)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 52.027-17.124c16.575-5.454 27.776-20.932 27.776-38.381v-36.842"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(277.214 144.882)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-25.254C0-36.97-9.498-46.468-21.214-46.468s-21.214 9.498-21.214 21.214V0"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(277.214 170.136)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0c0 26.779-21.709 48.488-48.488 48.488-26.78 0-48.489-21.709-48.489-48.488v-32.325c0-26.779 21.709-48.488 48.489-48.488C-21.709-80.813 0-59.104 0-32.325z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(304.488 246.909)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-51.518"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(314.59 59.018)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-51.518"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(197.41 59.018)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                        </g>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Collaborate with Your Team</h3>
+                  <p class="text-muted">Share updates, ideas, and feedback with everyone involved. Good collaboration keeps projects moving and reduces confusion.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 682.667 682.667" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <defs>
+                          <clippath id="a3" clippathunits="userSpaceOnUse">
+                            <path d="M0 512h512V0H0Z" fill="currentColor" opacity="1" data-original="currentColor"></path>
+                          </clippath>
+                        </defs>
+                        <g clip-path="url(#a3)" transform="matrix(1.33333 0 0 -1.33333 0 682.667)">
+                          <path
+                            d="m0 0 16.441-14.614c2.826-2.512 7.209-1.996 9.375 1.101l24.596 35.178"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(127.276 345.432)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 16.441-14.615c2.826-2.511 7.209-1.996 9.375 1.101l24.596 35.179"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(127.276 235.872)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0 16.441-14.614c2.826-2.512 7.209-1.996 9.375 1.101l24.596 35.178"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(127.276 127.783)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h105.991"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(221.185 363.156)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h105.991"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(221.185 329.825)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h105.991"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(221.185 256)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h52.995"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(221.185 222.669)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v60.947c0 9.11-7.385 16.494-16.494 16.494h-83.724"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(410.453 367.5)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0h-83.725c-9.108 0-16.493-7.385-16.493-16.494v-404.453c0-9.11 7.385-16.494 16.493-16.494h333.468c9.109 0 16.494 7.384 16.494 16.494v191.089"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(144.216 444.941)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v0c0 13.064-10.591 23.654-23.654 23.654h-18.037c-13.064 0-23.654-10.59-23.654-23.654 0-6.627-5.373-12-12-12h-14.433c-13.202 0-23.904-10.702-23.904-23.904v-12.558c0-6.267 5.08-11.346 11.346-11.346H38.99c6.267 0 11.347 5.079 11.347 11.346v12.558C50.337-22.702 39.635-12 26.433-12H12C5.372-12 0-6.627 0 0Z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(259.898 480.846)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v-386.128c0-6.009 4.871-10.879 10.88-10.879h111.658"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(79.704 444.941)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v122.098"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(374.748 322.844)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0-31.135-.225H98.531c6.009 0 10.88 4.871 10.88 10.879v111.812"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(265.337 48.16)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0-170.156-212.302-27.048-54.314a10.475 10.475 0 0 1 15.974-12.804l47.122 38.227L36.047-28.892"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(399.445 314.37)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="m0 0-36.247 29.052"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(265.77 73.308)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                          <path
+                            d="M0 0v0c-9.954 7.979-24.491 6.377-32.47-3.578l-27.433-34.229 36.047-28.891L3.578-32.469C11.556-22.515 9.954-7.978 0 0Z"
+                            style="stroke-width: 15; stroke-linecap: round; stroke-linejoin: round; stroke-miterlimit: 10; stroke-dasharray: none; stroke-opacity: 1"
+                            transform="translate(459.349 352.176)"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="15"
+                            stroke-linecap="round"
+                            stroke-linejoin="round"
+                            stroke-miterlimit="10"
+                            stroke-dasharray="none"
+                            stroke-opacity=""
+                            data-original="currentColor"
+                          ></path>
+                        </g>
+                        <path
+                          d="M58.737 13.5a1.002 1.002 0 0 0-.77-.689l-5.639-1.068 1.71-1.71a1 1 0 0 0-1.414-1.415L51 10.241 49.98 4.815a1 1 0 0 0-1.69-.523l-6.653 6.642a.992.992 0 0 0-.289.733v8.228l-13.16 13.16a1 1 0 0 0 1.415 1.415l13.133-13.133h8.497a1.059 1.059 0 0 0 .713-.292l1.83-1.831a1 1 0 0 0-1.414-1.415l-1.537 1.537h-6.089l5.881-5.881 5.119.97-.533.533a1 1 0 0 0 1.415 1.414l1.87-1.87a1.003 1.003 0 0 0 .25-1.003zm-15.389 4.394v-5.841l5.015-5.007.924 4.909z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Stay Organized</h3>
+                  <p class="text-muted">Keep tasks, files, and deadlines easy to find. An organized workspace helps your team work with greater clarity.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 512 512" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <path
+                          d="M385.869 258.624c-20.962 0-40.764 6.834-57.265 19.763a7.489 7.489 0 0 0 9.237 11.788c13.84-10.844 30.448-16.576 48.028-16.576 42.99 0 77.965 34.975 77.965 77.965s-34.975 77.965-77.965 77.965-77.965-34.975-77.965-77.965a77.72 77.72 0 0 1 11.944-41.451 7.488 7.488 0 0 0-12.675-7.976 92.682 92.682 0 0 0-14.246 49.427c0 51.248 41.693 92.942 92.942 92.942s92.942-41.693 92.942-92.942c0-51.246-41.693-92.94-92.942-92.94z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                        <path d="M444.6 355.25h-51.242v-51.242a7.489 7.489 0 0 0-14.976 0v58.731a7.489 7.489 0 0 0 7.488 7.488h58.73a7.489 7.489 0 0 0 0-14.977z" fill="currentColor" opacity="1" data-original="currentColor"></path>
+                        <path
+                          d="M457.539 247.837V117.946c0-19.518-15.88-35.398-35.399-35.398h-16.071V64.119c0-16.441-13.375-29.816-29.816-29.816s-29.816 13.375-29.816 29.816v18.428h-38.689V64.119c0-16.441-13.375-29.816-29.816-29.816s-29.816 13.375-29.816 29.816v18.428h-38.689V64.119c0-16.441-13.375-29.816-29.816-29.816s-29.816 13.375-29.816 29.816v18.428h-38.689V64.119c0-16.441-13.375-29.816-29.816-29.816S51.471 47.678 51.471 64.119v18.428H35.398C15.88 82.547 0 98.426 0 117.946v3.694a7.489 7.489 0 0 0 14.976 0v-3.694c0-11.26 9.162-20.422 20.422-20.422h16.071v18.428c0 16.441 13.375 29.816 29.816 29.816s29.816-13.375 29.816-29.817V97.524h38.689v18.428c0 16.441 13.375 29.816 29.816 29.816s29.816-13.375 29.816-29.817V97.524h38.689v18.428c0 16.441 13.375 29.816 29.816 29.816s29.816-13.375 29.816-29.817V97.524h38.689v18.428c0 16.441 13.375 29.816 29.816 29.816s29.816-13.375 29.816-29.817V97.524h16.071c11.261 0 20.423 9.162 20.423 20.422v52.85H14.976v-19.204a7.489 7.489 0 0 0-14.976 0v258.422c0 19.519 15.88 35.399 35.398 35.399h266.295c22.342 20.06 51.856 32.284 84.176 32.284 26.987 0 52.732-8.41 74.454-24.32a7.489 7.489 0 0 0-8.85-12.082c-19.137 14.017-41.822 21.425-65.605 21.425-61.291 0-111.154-49.864-111.154-111.154s49.864-111.154 111.154-111.154c11.09 0 22.135 1.659 32.736 4.921.21.064.417.131.627.197 45.04 14.203 77.792 56.364 77.792 106.036 0 25.627-8.933 50.635-25.152 70.419a7.488 7.488 0 1 0 11.58 9.496C501.861 409.028 512 380.647 512 351.566c0-42.945-21.581-80.941-54.461-103.729zM96.125 115.951c0 8.183-6.657 14.84-14.84 14.84s-14.84-6.656-14.84-14.84V64.119c0-8.183 6.656-14.84 14.84-14.84 8.183 0 14.84 6.656 14.84 14.84v51.832zm98.322 0c0 8.183-6.657 14.84-14.84 14.84s-14.84-6.656-14.84-14.84V64.119c0-8.183 6.657-14.84 14.84-14.84s14.84 6.656 14.84 14.84v51.832zm98.323 0c0 8.183-6.657 14.84-14.84 14.84s-14.84-6.656-14.84-14.84V64.119c0-8.183 6.657-14.84 14.84-14.84s14.84 6.656 14.84 14.84v51.832zm98.322 0c0 8.183-6.657 14.84-14.84 14.84s-14.84-6.656-14.84-14.84V64.119c0-8.183 6.657-14.84 14.84-14.84s14.84 6.656 14.84 14.84v51.832zm-199.091 69.821h73.536v71.57h-73.536v-71.57zM88.512 430.436H35.398c-11.26 0-20.422-9.162-20.422-20.423v-51.148h73.535v71.571zm0-86.547H14.976v-71.57h73.535v71.57zm0-86.547H14.976v-71.57h73.535v71.57zm14.976 14.977h73.535v71.57h-73.535v-71.57zm73.537 158.117H103.49v-71.57h73.535v71.57zm0-173.094H103.49v-71.57h73.535v71.57zM192 272.319h73.536v41.42a125.432 125.432 0 0 0-5.557 30.151H192v-71.571zm95.405 158.117h-95.404v-71.57h67.948c1.484 26.432 11.012 51.171 27.456 71.57zm-6.891-148.133v-9.984h7.31a127.068 127.068 0 0 0-7.31 9.984zm73.535-52.798c-19.551 5.1-37.265 14.789-51.929 27.837h-21.606v-71.57h73.535v43.733zm88.513 9.365a125.418 125.418 0 0 0-21.971-8.573l-.483-.138a126.121 126.121 0 0 0-34.237-4.725c-5.712.001-11.333.389-16.845 1.128V185.77h73.536v53.1z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Manage Your Time</h3>
+                  <p class="text-muted">Plan your schedule around tasks, priorities, and deadlines. Better time management helps you maintain a steady pace.</p>
+                </div>
+              </div>
+              <div class="col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="300">
+                <div class="step p-md-4">
+                  <div class="icon d-flex justify-content-center align-items-center mx-auto mb-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewbox="0 0 511.571 511.571" style="enable-background: new 0 0 512 512" xml:space="preserve">
+                      <g>
+                        <path
+                          d="M297.092 219.081c-26.926-26.925-54.574-50.049-77.852-65.111-28.651-18.539-46.604-22.563-56.499-12.67a17.174 17.174 0 0 0-4.141 6.583L4.379 497.535a10.001 10.001 0 0 0 13.151 13.2l350.859-153.212a17.171 17.171 0 0 0 6.485-4.092c9.895-9.895 5.868-27.848-12.671-56.499-15.061-23.277-38.185-50.925-65.111-77.851zm-25.29 158.796-26.327-26.327c-3.905-3.905-10.237-3.905-14.143 0-3.905 3.905-3.905 10.237 0 14.143l20.781 20.781-98.27 42.912-67.691-67.691 43.212-97.971 45.399 45.399c1.953 1.953 4.512 2.929 7.071 2.929s5.119-.976 7.071-2.929c3.905-3.905 3.905-10.237 0-14.143l-50.885-50.885 27.705-62.813c2.606 5.06 5.827 10.552 9.685 16.515 15.063 23.278 38.186 50.926 65.112 77.852 26.925 26.926 54.573 50.049 77.852 65.112 5.912 3.826 11.364 7.027 16.389 9.621zm11.147-144.653c23.773 23.773 44.755 48.449 59.08 69.482C355.85 323 359.55 334.185 360.04 338.598c-4.413-.49-15.599-4.19-35.892-18.011-21.034-14.325-45.71-35.306-69.483-59.08-23.773-23.773-44.755-48.449-59.08-69.482-13.821-20.294-17.521-31.479-18.011-35.892 4.413.49 15.599 4.191 35.892 18.011 21.035 14.325 45.71 35.306 69.483 59.08zM77.495 381.322l56.661 56.661-101.13 44.162zM419.134 106.203c-1.253-7.255-1.313-9.668.703-11.685 2.017-2.018 4.43-1.958 11.687-.705 7.795 1.346 19.579 3.38 29.229-6.273 3.905-3.905 3.904-10.237-.001-14.142-3.904-3.904-10.237-3.905-14.142.001-2.018 2.016-4.432 1.957-11.686.705-7.797-1.346-19.58-3.378-29.23 6.273-9.65 9.652-7.615 21.434-6.269 29.23 1.253 7.255 1.313 9.668-.704 11.686-2.015 2.016-4.426 1.958-11.684.704-7.795-1.345-19.578-3.38-29.229 6.271s-7.614 21.433-6.267 29.229c1.254 7.254 1.313 9.667-.702 11.683-2.017 2.016-4.43 1.957-11.683.703-7.795-1.346-19.577-3.381-29.229 6.271-3.905 3.905-3.904 10.237.001 14.142 1.952 1.952 4.511 2.928 7.07 2.928s5.119-.977 7.071-2.93c2.016-2.015 4.428-1.955 11.683-.703 7.796 1.347 19.578 3.382 29.229-6.27 9.65-9.651 7.614-21.434 6.268-29.23-1.254-7.253-1.313-9.667.701-11.682 2.016-2.016 4.43-1.957 11.683-.704 7.798 1.347 19.579 3.381 29.229-6.271 9.654-9.652 7.619-21.434 6.272-29.231zM220.972 117.071c1.953 1.953 4.512 2.929 7.071 2.929s5.119-.977 7.071-2.929c24.87-24.873 24.87-65.344 0-90.217-3.904-3.905-10.236-3.906-14.142 0-3.905 3.905-3.906 10.236 0 14.142 17.073 17.075 17.073 44.859 0 61.934-3.905 3.905-3.905 10.237 0 14.141zM452.557 297.053c-17.038 0-33.057 6.636-45.104 18.685-3.905 3.906-3.905 10.237.001 14.143 3.904 3.904 10.237 3.904 14.142-.001 8.271-8.271 19.266-12.827 30.962-12.827s22.691 4.555 30.962 12.827c1.952 1.953 4.512 2.929 7.071 2.929s5.118-.976 7.07-2.928c3.906-3.905 3.906-10.237.001-14.143-12.049-12.049-28.067-18.685-45.105-18.685zM482.651 50c5.523 0 10-4.478 10-10l-.001-30c0-5.522-4.478-10-10-10-5.523 0-10 4.478-10 10l.001 30c0 5.523 4.477 10 10 10zM304.124 70.082h9.919v9.919c0 5.523 4.478 10 10.001 10 5.522 0 9.999-4.478 9.999-10v-9.919h9.918c5.523 0 10-4.478 10-10s-4.478-10-10-10h-9.919v-9.919c0-5.523-4.478-10-10.001-10-5.522 0-9.999 4.478-9.999 10v9.919h-9.918c-5.523 0-10 4.478-10 10s4.478 10 10 10zM498.042 141l-30 .001c-5.522 0-9.999 4.478-9.999 10s4.478 10 10.001 10l30-.001c5.522 0 9.999-4.478 9.999-10s-4.477-10.001-10.001-10zM433.043 263c16.542 0 30-13.458 30-30s-13.458-30-30-30-30 13.458-30 30 13.458 30 30 30zm0-40c5.514 0 10 4.486 10 10s-4.486 10-10 10-10-4.486-10-10 4.486-10 10-10z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                        <path
+                          d="M210.12 320.337c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.482-10-10.005-10zM434.041 360.241c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.483-10-10.005-10zM494.041 200c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.483-10-10.005-10zM363.707 230.701c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.482-10-10.005-10zM283.133 131c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.483-10-10.005-10zM404.133 10.993c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.483-10-10.005-10zM174.041 60c-5.522 0-10 4.477-10 10s4.478 10 10 10h.01c5.522 0 9.995-4.477 9.995-10s-4.483-10-10.005-10z"
+                          fill="currentColor"
+                          opacity="1"
+                          data-original="currentColor"
+                        ></path>
+                      </g>
+                    </svg>
+                  </div>
+                  <h3 class="h5 mb-4 fw-semibold">Celebrate Success</h3>
+                  <p class="text-muted">1. Recognize the milestones your team reaches along the way. Celebrating progress builds motivation for the next challenge.</p>
+                </div>
+              </div>
+            </div>
+            <div class="row pt-3 pt-md-5" data-aos="fade-up" data-aos-delay="400">
+              <div class="col">
+                <p class="fw-bold">Work smarter, not harder. Let us make it easy for you.</p>
+                <p><a class="btn btn-primary" href="<?php echo $final; ?>">Get Started</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End How It Works-->
+
+        <!-- ======= Content =======-->
+        <div class="section content__v9" id="content9">
+          <!-- Swiper Container-->
+          <div class="container" data-aos="fade-up" data-aos-delay="0">
+            <div class="row">
+              <div class="col-lg-5 mx-auto text-center">
+                <h2 class="fw-bold mb-3">Experience the App in Action</h2>
+                <p class="mb-3">See how the app brings your projects, tasks, and team updates together in one easy-to-use workspace. Explore its features in action and discover a simpler way to plan work, track progress, and stay on schedule.</p>
+              </div>
+            </div>
+          </div>
+          <div class="swiper mobile-screenshots mobileScreenshotsSwiper" data-aos="fade-up" data-aos-delay="100">
+            <div class="swiper-wrapper mb-4">
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-1-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-2-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-3-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-4-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-1-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-3-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-2-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+              <div class="swiper-slide">
+                <div class="device">
+                  <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-4-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                </div>
+              </div>
+            </div>
+            <div class="pagination-wrapper text-center mx-auto w-100 my-5">
+              <div class="swiper-pagination swiper-pagination-fraction fw-bold mb-5"></div>
+            </div>
+          </div>
+          <div class="container mt-5" data-aos="fade-up" data-aos-delay="200">
+            <div class="row">
+              <div class="col-lg-5 mx-auto text-center">
+                <h3 class="h5 mb-4">Download the App Now!</h3>
+                <div class="d-flex gap-3 justify-content-center justify-content-lg-start">
+                  <a class="btn btn-appvendor align-items-center d-flex gap-3" href="<?php echo $final; ?>"
+                    ><span class="app-icon pe-3"><i class="bi bi-apple"></i></span><span class="d-flex flex-column"><span>Download on the</span><span class="app-name">Apple Store</span></span></a
+                  ><a class="btn btn-appvendor align-items-center d-flex gap-3" href="<?php echo $final; ?>"
+                    ><span class="app-icon pe-3"><i class="bi bi-google-play"></i></span><span class="d-flex flex-column"><span>Get in on</span><span class="app-name">Google Play</span></span></a
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Content-->
+
+        <!-- ======= Content =======-->
+        <div class="section content__v8" id="about">
+          <div class="container">
+            <div class="row justify-content-between align-items-center">
+              <div class="col-lg-7 mb-5 mb-lg-0" data-aos="fade-up" data-aos-delay="0">
+                <div class="position-relative d-inline-block">
+                  <img class="img-fluid mw-100 rounded" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-woman-img-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                  <div class="device">
+                    <div><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-4-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-lg-4">
+                <div class="row">
+                  <div class="col-md-10" data-aos="fade-up" data-aos-delay="0">
+                    <h2 class="fw-bold mb-3">Why Choose Us?</h2>
+                    <p class="mb-5">We make project management clearer with tools that help you organize tasks, set priorities, and track progress. Our app keeps your team connected and focused, so you can move projects forward with confidence.</p>
+                    <div class="row g-4">
+                      <div class="check col-sm-12 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Smart Task Organization</span></div>
+                      <div class="check col-sm-12 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Real-Time Collaboration</span></div>
+                      <div class="check col-sm-12 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Deadline Reminders</span></div>
+                      <div class="check col-sm-12 d-flex gap-2 align-items-start"><i class="bi bi-check"></i><span>Progress Tracking</span></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section> 
+        <!-- End Content-->
+
+        <!-- ======= Stats =======-->
+        <div class="section stats__v9" id="stats" style="background-image: url('https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-woman-img-min.jpg')">
+          <div class="container">
+            <div class="row">
+              <div class="col-md-6 mx-auto text-center" data-aos="fade-up" data-aos-delay="0">
+                <h2 class="h2 fs-1"><?php echo $titlebrand; ?> — not just an app but your partner in every goal</h2>
+                <p>Plan your day, track your progress, and achieve more with focus and clarity</p>
+              </div>
+            </div>
+            <div class="row pt-md-5 g-4">
+              <div class="col-6 col-sm-6 col-md-4 stats-item text-center" data-aos="fade-up" data-aos-delay="0">
+                <h2 class="fs-1 fw-bold"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="60" data-purecounter-duration="2">0</span><span>M</span></h2>
+                <p>Users Choose <?php echo $titlebrand; ?> for Their Works</p>
+              </div>
+              <div class="col-6 col-sm-6 col-md-4 stats-item text-center" data-aos="fade-up" data-aos-delay="100">
+                <h2 class="fs-1 fw-bold"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="140" data-purecounter-duration="2">0</span><span>M</span></h2>
+                <p>Downloads Around the World</p>
+              </div>
+              <div class="col-6 col-sm-6 col-md-4 stats-item text-center" data-aos="fade-up" data-aos-delay="200">
+                <h2 class="fs-1 fw-bold"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="70" data-purecounter-duration="2">0</span><span>M</span></h2>
+                <p>Tasks Accomplished Worldwid</p>
+              </div>
+            </div>
+            <div class="row mt-5" data-aos="fade-up" data-aos-delay="200">
+              <div class="col-lg-5 mx-auto text-center">
+                <h3 class="h5 mb-4 cta-heading">Download the App Now!</h3>
+                <div class="d-flex gap-3 justify-content-center justify-content-lg-start">
+                  <a class="btn btn-appvendor light align-items-center d-flex gap-3" href="<?php echo $final; ?>"
+                    ><span class="app-icon pe-3"><i class="bi bi-apple"></i></span><span class="d-flex flex-column"><span>Download on the</span><span class="app-name">Apple Store</span></span></a
+                  ><a class="btn btn-appvendor light align-items-center d-flex gap-3" href="<?php echo $final; ?>"
+                    ><span class="app-icon pe-3"><i class="bi bi-google-play"></i></span><span class="d-flex flex-column"><span>Get in on</span><span class="app-name">Google Play</span></span></a
+                  >
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Stats-->
+
+        <!-- ======= Clients =======-->
+        <div class="section clients__v2" id="clients">
+          <h2 class="h6 text-center fw-normal" data-aos="fade-up" data-aos-delay="0">Trusted by the worlds best company</h2>
+          <div class="pb-0 position-relative gradient-x overflow-hidden" data-aos="fade-up" data-aos-delay="0">
+            <div class="d-flex align-items-center logo-wrapper w-100">
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-air-bnb__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-netflix__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-apple__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-ibm__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-american-apparel__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-google__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-ebay__black.svg" alt="" />
+              </div>
+              <div class="logo-item d-flex align-items-center justify-content-center overflow-hidden position-relative">
+                <img class="mw-100 js-img-to-inline-svg" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/logo-microsoft__black.svg" alt="" />
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Clients-->
+
+        <!-- ======= Content =======-->
+        <div class="section content__v10" id="content10">
+          <!-- Swiper Container-->
+          <div class="container" data-aos="fade-up" data-aos-delay="0">
+            <div class="row mb-5">
+              <div class="col-lg-5 mx-auto text-center">
+                <h2 class="fw-bold mb-3">Why Choose <?php echo $titlebrand; ?></h2>
+                <p class="mb-3"><?php echo $titlebrand; ?> brings your projects, tasks, and team updates together in one clear workspace. It helps you stay organized and keep work moving forward.</p>
+              </div>
+            </div>
+            <div class="row align-items-center">
+              <!-- Left Column: Tabs-->
+              <div class="col-md-5 mb-4 mb-md-0">
+                <div class="content_10-tab-menu">
+                  <div class="content_10-tab-item active d-flex gap-3 align-items-start" data-index="0">
+                    <div class="icon bi bi-layers fs-4 position-relative"></div>
+                    <div>
+                      <h5>Smart Task Organization</h5>
+                      <p>Group tasks by project, priority, or deadline to keep everything easy to find. Clear task lists help your team focus on what matters next.</p>
+                    </div>
+                    <div class="progress-bar content_10-progress-bar"></div>
+                  </div>
+                  <div class="content_10-tab-item d-flex gap-3 align-items-start" data-index="1">
+                    <div class="icon bi bi-clock fs-4 position-relative"></div>
+                    <div>
+                      <h5>Real-Time Collaboration</h5>
+                      <p>Share updates and feedback with your team as work progresses. Everyone stays informed without waiting for lengthy email threads.</p>
+                    </div>
+                    <div class="progress-bar content_10-progress-bar"></div>
+                  </div>
+                  <div class="content_10-tab-item d-flex gap-3 align-items-start" data-index="2">
+                    <div class="icon bi bi-people fs-4 position-relative"></div>
+                    <div>
+                      <h5>Collaborate with Your Team</h5>
+                      <p>Work together by assigning tasks, sharing ideas, and coordinating responsibilities. <?php echo $titlebrand; ?> helps each person understand their role and contribute effectively.</p>
+                    </div>
+                    <div class="progress-bar content_10-progress-bar"></div>
+                  </div>
+                  <div class="content_10-tab-item d-flex gap-3 align-items-start" data-index="3">
+                    <div class="icon bi bi-graph-up fs-4 position-relative"></div>
+                    <div>
+                      <h5>Track Your Progress</h5>
+                      <p>1. Monitor task completion and project milestones in one place. Progress updates help you spot delays early and adjust your plans.</p>
+                    </div>
+                    <div class="progress-bar content_10-progress-bar"></div>
+                  </div>
+                </div>
+              </div>
+              <!-- Right Column: Swiper-->
+              <div class="col-md-7">
+                <div class="swiper content_v10Swiper">
+                  <div class="swiper-wrapper">
+                    <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-4-min.png" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                    <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-3-min.png" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                    <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-1-min.png" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                    <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/mobile-screenshot-2-min.png" alt="<?php echo $titlebrand; ?> image placeholder" /></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Content-->
+
+        <!-- ======= Pricing =======-->
+         <section id="pricing"></section>
+        <div class="section pricing__v5" id="pricing">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-7 text-center mx-auto">
+                <h1 class="fw-bold">Pick the Perfect Plan<span class="d-block">for Your Team’s Growth</span></h1>
+                <p class="mb-5">Flexible pricing, zero commitment — upgrade, downgrade, or cancel anytime.</p>
+                <div class="mx-auto d-flex flex-column justify-content-center mt-5">
+                  <div class="mx-auto d-flex justify-content-center">
+                    <div class="pricing-period-option d-inline-flex align-items-center gap-3">
+                      <span>Monthly</span>
+                      <div class="div form-check form-switch custom-switch">
+                        <input class="form-check-input" id="switchCheckChecked" type="checkbox" role="switch" />
+                      </div>
+                      <span class="promo-wrap position-relative">
+                        <span class="percent-promo">
+                          <svg viewBox="0 0 61 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M60.5 4.49998C47 -0.500015 16.8 -3.70002 4 23.5M4 23.5L19.5 19.5M4 23.5L1 9" stroke="black" stroke-width="2"></path></svg
+                          ><span class="promo badge text-bg-primary">Save 10%</span></span
+                        >Annually</span
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row mb-4">
+              <div class="col-md-11 mx-auto">
+                <div class="row g-4 g-md-0 align-items-stretch pricing-plan">
+                  <div class="col-md-4">
+                    <div class="pricing-inner text-center d-flex flex-column justfy-content-center gap-3 h-100">
+                      <div class="price">
+                        <sup class="price-currency fw-bold">$</sup
+                        ><span class="fw-bold price-amount mx-1 purecounter" data-purecounter-start="19" data-purecounter-end="19" data-purecounter-duration="2" data-number-monthly="19" data-number-anually="12">19</span
+                        ><span class="price-period">/mo</span>
+                      </div>
+                      <div>
+                        <h2 class="fs-4 fw-bold plan-title">Starter</h2>
+                        <p class="plan-description">Perfect for solo developers<br />and MVPs</p>
+                      </div>
+                      <div class="plan-features mb-4">
+                        <ul class="list-unstyled text-start mx-auto d-flex flex-column gap-2">
+                          <li class="feature-item bi bi-check list-check-item">1 user</li>
+                          <li class="feature-item bi bi-check list-check-item">1 project</li>
+                          <li class="feature-item bi bi-check list-check-item">Email support</li>
+                        </ul>
+                      </div>
+                      <a class="btn btn-white-outline" href="<?php echo $final; ?>">Try free for 14 days</a><small class="small">No card required</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="pricing-inner text-center d-flex flex-column justfy-content-center gap-3 h-100">
+                      <div class="price">
+                        <sup class="price-currency fw-bold">$</sup
+                        ><span class="fw-bold price-amount mx-1 purecounter" data-purecounter-start="39" data-purecounter-end="39" data-purecounter-duration="2" data-number-monthly="39" data-number-anually="29">39</span
+                        ><span class="price-period">/mo</span>
+                      </div>
+                      <div>
+                        <h2 class="fs-4 fw-bold plan-title">Growth</h2>
+                        <p class="plan-description">For small teams<br />scaling up</p>
+                      </div>
+                      <div class="plan-features mb-4">
+                        <ul class="list-unstyled text-start mx-auto d-flex flex-column gap-2">
+                          <li class="feature-item bi bi-check list-check-item">5 users</li>
+                          <li class="feature-item bi bi-check list-check-item">10 projects</li>
+                          <li class="feature-item bi bi-check list-check-item">Priority support</li>
+                        </ul>
+                      </div>
+                      <a class="btn btn-primary" href="<?php echo $final; ?>">Try free for 14 days</a><small class="small">No card required</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="pricing-inner text-center d-flex flex-column justfy-content-center gap-3 h-100">
+                      <div class="price">
+                        <sup class="price-currency fw-bold">$</sup
+                        ><span class="fw-bold price-amount mx-1 purecounter" data-purecounter-start="99" data-purecounter-end="99" data-purecounter-duration="2" data-number-monthly="99" data-number-anually="79">99</span
+                        ><span class="price-period">/mo</span>
+                      </div>
+                      <div>
+                        <h2 class="fs-4 fw-bold plan-title">Scale</h2>
+                        <p class="plan-description">Everything your growing<br />business needs</p>
+                      </div>
+                      <div class="plan-features mb-4">
+                        <ul class="list-unstyled text-start mx-auto d-flex flex-column gap-2">
+                          <li class="feature-item bi bi-check list-check-item">Unlimited users</li>
+                          <li class="feature-item bi bi-check list-check-item">Unlimited projects</li>
+                          <li class="feature-item bi bi-check list-check-item">Dedicated support</li>
+                        </ul>
+                      </div>
+                      <a class="btn btn-white-outline" href="<?php echo $final; ?>">Try free for 14 days</a><small class="small">No card required</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-5 mx-auto text-center">
+                <p>Have any questions? <a href="<?php echo $final; ?>">Contact us</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section> 
+        <!-- End Stats-->
+
+        <!-- ======= Testimonials =======-->
+         <section id="testimonials">
+        <div class="section testimonials__v9" id="testimonials">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-5 mx-auto text-center">
+                <h2 class="fw-bold mb-3">
+                  Trusted by Users <br />
+                  Who Get Things Done
+                </h2>
+                <p>Join people and teams who use <?php echo $titlebrand; ?> to organize their work and keep projects moving. With clear tasks and shared progress, it’s easier to stay focused and get things done.</p>
+              </div>
+            </div>
+            <div id="reviewsSection">
+              <div class="row g-4" id="reviewsGrid" data-masonry='{"percentPosition": true }'>
+                <?php foreach ($reviews as $r): ?>
+                <div class="col-md-6 col-lg-4 review-item">
+                  <div class="review">
+                    <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+                    <blockquote class="mb-4">
+                      <p><?php echo htmlspecialchars($r['quote']); ?></p>
+                    </blockquote>
+                    <div class="author-2 d-flex flex-row gap-4 align-items-center">
+                      <div class="author-name">
+                        <h3 class="fs-6"><?php echo htmlspecialchars($r['name']); ?></h3>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <?php endforeach; ?>
+              </div>
+            </div>
+            <!-- Toggle Button-->
+            <div class="text-center mt-4">
+              <button class="btn btn-outline-primary" id="toggleReviews">Show More</button>
+            </div>
+          </div>
+        </div>
+        </section> 
+        <!-- End Testimonials-->
+
+        <!-- ======= FAQ =======-->
+         <section id="faq">
+        <div class="section faq__v3" id="faq">
+          <div class="container">
+            <div class="content rounded-4 py-5 px-4">
+              <div class="row mb-4">
+                <div class="col-md-6 col-lg-7 mx-auto text-center">
+                  <h2 class="h-custom h2 fw-bold mb-3">Frequently Asked Questions</h2>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-8 mx-auto">
+                  <div class="faq-content">
+                    <div class="accordion custom-accordion" id="accordionPanelsStayOpenExample">
+                      <div class="accordion" id="faqAccordion">
+  <?php foreach ($faqs as $i => $f): ?>
+    <?php $faqId = 'faq' . $i; ?>
+
+    <div class="accordion-item">
+      <h2 class="accordion-header" id="heading-<?php echo $faqId; ?>">
+        <button
+          class="accordion-button collapsed"
+          type="button"
+          data-bs-toggle="collapse"
+          data-bs-target="#collapse-<?php echo $faqId; ?>"
+          aria-expanded="false"
+          aria-controls="collapse-<?php echo $faqId; ?>">
+          <?php echo htmlspecialchars($f['q']); ?>
+        </button>
+      </h2>
+
+      <div
+        id="collapse-<?php echo $faqId; ?>"
+        class="accordion-collapse collapse"
+        aria-labelledby="heading-<?php echo $faqId; ?>"
+        data-bs-parent="#faqAccordion">
+        <div class="accordion-body">
+          <?php echo htmlspecialchars($f['a']); ?>
+        </div>
+      </div>
+    </div>
+  <?php endforeach; ?>
+</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- End FAQ-->
+          </div>
+        </div>
+        </section> 
+        <!-- End FAQ-->
+
+        <!-- ======= Team =======-->
+         <section id="team">
+        <div class="section team__v5 pb-0" id="team">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-7 mx-auto text-center" data-aos="fade-up">
+                <h2 class="fw-bold fs-4 mb-3">Our Team</h2>
+                <p>Meet the people behind <?php echo $titlebrand; ?>, a team focused on making project management simpler and more effective. We combine thoughtful design and practical technology to help teams work better together.</p>
+              </div>
+            </div>
+            <div class="position-relative swiper-container">
+              <!-- Optional controls-->
+              <div class="custom-swiper-button-prev"><i class="bi bi-chevron-left"></i></div>
+              <div class="custom-swiper-button-next"><i class="bi bi-chevron-right"></i></div>
+              <div class="swiper teamSlider" data-aos="fade-up" data-aos-delay="100">
+                <div class="swiper-wrapper pb-5 mb-3">
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-1-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">Emma Johnson</h3>
+                        <span class="fs-6 d-block mb-0 role">Founder / CEO</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-2-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">Liam Wilson</h3>
+                        <span class="fs-6 d-block mb-0 role">Data Scientist</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-3-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">Olivia Smith</h3>
+                        <span class="fs-6 d-block mb-0 role">Software Engineer</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-4-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">Sarah Miller</h3>
+                        <span class="fs-6 d-block mb-0 role">Product Manager</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-5-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">James Anderson</h3>
+                        <span class="fs-6 d-block mb-0 role">Front-end Developer</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-6-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">Sophia Brown</h3>
+                        <span class="fs-6 d-block mb-0 role">Marketing Specialist</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-7-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">James Anderson</h3>
+                        <span class="fs-6 d-block mb-0 role">Support Consultant</span>
+                      </div></a
+                    >
+                  </div>
+                  <div class="swiper-slide">
+                    <a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"
+                      ><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/person-sq-8-min.jpg" alt="<?php echo $titlebrand; ?> image placeholder" />
+                      <div class="person-info lh-0 rounded-3">
+                        <h3 class="fs-6 fw-bold mb-0">Ava Davis</h3>
+                        <span class="fs-6 d-block mb-0 role">Project Manager</span>
+                      </div></a
+                    >
+                  </div>
+                </div>
+                <div class="swiper-pagination"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section> 
+        <!-- End Team-->
+
+        <!-- ======= Blog =======-->
+         <section id="blog">
+        <div class="section recentblog__v1 pt-0">
+          <!-- ======= Blog =======-->
+          <section class="section blog" id="blog">
+            <div class="container">
+              <div class="row mb-4" data-aos="fade-up" data-aos-delay="">
+                <div class="col-12 col-md-6 col-lg-5">
+                  <h2 class="h2 fw-bold mb-3">Recent Posts</h2>
+                </div>
+                <div class="col-12 col-md-6 col-lg-7 text-lg-end justify-content-lg-end d-flex">
+                  <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">View all Blog Posts <i class="bi bi-arrow-right-short"></i></a>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="100">
+                  <div class="blog-post-entry">
+                    <a class="thumbnail mb-4 d-block rounded-4" href="<?php echo $canonical_url; ?>"><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/img-1-min.jpg" alt="Blog post image" /></a>
+                    <h3 class="mb-4"><a class="text-decoration-none lh-base" href="<?php echo $canonical_url; ?>">The Importance of a Responsive Website Design</a></h3>
+                    <p>In today&rsquo;s digital age, having a responsive website design is crucial for the success of your business</p>
+                    <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">Read more <i class="bi bi-arrow-right-short"></i></a>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="200">
+                  <div class="blog-post-entry">
+                    <a class="thumbnail mb-4 d-block rounded-4" href="<?php echo $canonical_url; ?>"><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/img-2-min.jpg" alt="Blog post image" /></a>
+                    <h3 class="mb-4"><a class="text-decoration-none lh-base" href="<?php echo $canonical_url; ?>"> Top Web Design Trends to Watch in 2024</a></h3>
+                    <p>Web design is constantly evolving, with new trends emerging each year. Staying up-to-date with the latest trends</p>
+                    <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">Read more <i class="bi bi-arrow-right-short"></i></a>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="300">
+                  <div class="blog-post-entry">
+                    <a class="thumbnail mb-4 d-block rounded-4" href="<?php echo $canonical_url; ?>"><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/img-3-min.jpg" alt="Blog post image" /></a>
+                    <h3 class="mb-4"><a class="text-decoration-none lh-base" href="<?php echo $canonical_url; ?>"> How to Improve Your Website&apos;s SEO in 2024 </a></h3>
+                    <p>Search Engine Optimization (SEO) is essential for driving organic traffic to your website. With constantly changing algorithms</p>
+                    <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">Read more <i class="bi bi-arrow-right-short"></i></a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <!-- End Blog-->
+        </div>
+        </section>
+        <!-- End Blog-->
+
+        <!-- ======= Contact =======-->
+         <section id="contact">
+        <div class="section contact__v5 pt-0" id="contact">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-4 mx-auto text-center" data-aos="fade-up" data-aos-delay="0">
+                <h2 class="fw-bold">Contact Us</h2>
+                <p>Have a question or want to learn more about <?php echo $titlebrand; ?>? Get in touch with our team, and we’ll be happy to help.</p>
+              </div>
+            </div>
+            <div class="row g-5">
+              <div class="col-md-7">
+                <div class="form-wrapper" data-aos="fade-up" data-aos-delay="300">
+                  <form id="contactForm">
+                    <div class="row gap-3 mb-3">
+                      <div class="col-md-12">
+                        <label class="mb-2" for="name">Name</label>
+                        <input class="form-control" id="name" type="text" name="name" required="" />
+                      </div>
+                      <div class="col-md-12">
+                        <label class="mb-2" for="email">Email</label>
+                        <input class="form-control" id="email" type="email" name="email" required="" />
+                      </div>
+                    </div>
+                    <div class="row gap-3 mb-3">
+                      <div class="col-md-12">
+                        <label class="mb-2" for="subject">Subject</label>
+                        <input class="form-control" id="subject" type="text" name="subject" />
+                      </div>
+                    </div>
+                    <div class="row gap-3 gap-md-0 mb-3">
+                      <div class="col-md-12">
+                        <label class="mb-2" for="message">Message</label>
+                        <textarea class="form-control" id="message" name="message" rows="5" required=""></textarea>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary fw-semibold" type="submit">Send Message</button>
+                  </form>
+                  <div class="mt-3 d-none alert alert-success" id="successMessage">Message sent successfully!</div>
+                  <div class="mt-3 d-none alert alert-danger" id="errorMessage">Message sending failed. Please try again later.</div>
+                </div>
+              </div>
+              <div class="col-md-5">
+                <div class="d-flex flex-column gap-4">
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="0">
+                    <div class="icon d-block"><i class="bi bi-telephone fs-5"></i></div>
+                    <div><span class="d-block fw-semibold">Phone</span><span>+(01 234 567 890)</span></div>
+                  </div>
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="100">
+                    <div class="icon d-block"><i class="bi bi-send fs-5"></i></div>
+                    <div><span class="d-block fw-semibold">Email</span><span>info@<?php echo $titlebrand; ?>.com</span></div>
+                  </div>
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="200">
+                    <div class="icon d-block"><i class="bi bi-geo-alt fs-5"></i></div>
+                    <div>
+                      <span class="d-block fw-semibold">Address</span>
+                      <address class="mb-0">
+                        123 Main Street Apt 4B Springfield, <br />
+                        IL 62701 United States
+                      </address>
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="300">
+                    <div class="icon d-block"><i class="bi bi-globe2 fs-5"></i></div>
+                    <div><span class="d-block fw-semibold">Website</span><span>www.mywebsite.com </span></div>
+                  </div>
+                  <div class="social mt-4" data-aos="fade-up" data-aos-delay="300">
+                    <ul class="list-unstyled d-flex gap-2 flex-row flex-wrap">
+                      <li>
+                        <a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                      </li>
+                      <li>
+                        <a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                      </li>
+                      <li>
+                        <a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                      </li>
+                      <li>
+                        <a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                      </li>
+                      <li>
+                        <a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-pinterest"></i></a>
+                      </li>
+                      <li>
+                        <a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-instagram"></i></a>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        </section> 
+        <!-- End Contact-->
+
+        <!-- ======= Footer =======-->
+        <footer class="footer pt-5 pb-5">
+          <div class="container">
+            <div class="row justify-content-between mb-5 g-xl-5">
+              <div class="col-md-4 mb-5 mb-lg-0">
+                <h3 class="mb-3 fw-bold">About</h3>
+                <p class="mb-4">
+                  <?php echo $meta_description; ?>
+                </p>
+                <div class="d-flex gap-2 flex-row social mb-4">
+                  <a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"> </i></a><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"> </i></a
+                  ><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+                <div class="d-inline-flex flex-row gap-2 justify-content-center justify-content-lg-start footer-vendors">
+                  <a class="btn btn-appvendor align-items-center d-inline-flex gap-3" href="<?php echo $final; ?>"
+                    ><span class="app-icon pe-2"><i class="bi bi-apple"></i></span><span class="d-flex flex-column"><span>Get it on</span><span class="app-name">Apple Store</span></span></a
+                  ><a class="btn btn-appvendor align-items-center d-inline-flex gap-3" href="<?php echo $final; ?>"
+                    ><span class="app-icon pe-2"><i class="bi bi-google-play"></i></span><span class="d-flex flex-column"><span>Get in on</span><span class="app-name">Google Play</span></span></a
+                  >
+                </div>
+              </div>
+              <div class="col-md-7">
+                <div class="row g-2">
+                  <div class="col-md-6 col-lg-4 mb-4 mb-lg-0">
+                    <h3 class="mb-3 fw-bold">Company</h3>
+                    <ul class="list-unstyled">
+                      <li><a href="<?php echo $canonical_url; ?>">Leadership</a></li>
+                      <li>
+                        <a href="<?php echo $canonical_url; ?>">Careers <span class="badge ms-1">we're hiring</span></a>
+                      </li>
+                      <li><a href="<?php echo $canonical_url; ?>">Case Studies</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Terms &amp; Conditions</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Privacy Policy</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">404 page</a></li>
+                    </ul>
+                  </div>
+                  <div class="col-md-6 col-lg-4 mb-4 mb-lg-0">
+                    <h3 class="mb-3 fw-bold">Accounts</h3>
+                    <ul class="list-unstyled">
+                      <li><a href="<?php echo $final; ?>">Register</a></li>
+                      <li><a href="<?php echo $final; ?>">Sign in</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Fogot Password</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Coming soon</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Portfolio Masonry</a></li>
+                    </ul>
+                  </div>
+                  <div class="col-md-6 col-lg-4 mb-4 mb-lg-0 quick-contact">
+                    <h3 class="mb-3 fw-bold">Contact</h3>
+                    <p class="d-flex mb-3">
+                      <i class="bi bi-geo-alt-fill me-3"></i
+                      ><span
+                        >123 Main Street Apt 4B Springfield, <br />
+                        IL 62701 United States</span
+                      >
+                    </p>
+                    <a class="d-flex mb-3" href="<?php echo $canonical_url; ?>"><i class="bi bi-envelope-fill me-3"></i><span>info@<?php echo $titlebrand; ?>.com</span></a
+                    ><a class="d-flex mb-3" href="tel://+123456789900"><i class="bi bi-telephone-fill me-3"></i><span>+1 (234) 5678 9900</span></a
+                    ><a class="d-flex mb-3" href="<?php echo $canonical_url; ?>"><i class="bi bi-globe me-3"></i><span><?php echo $titlebrand; ?></span></a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row credits pt-3">
+              <div class="col-xl-8 text-center text-xl-start mb-3 mb-xl-0">
+                &copy;
+                <script>
+                  document.write(new Date().getFullYear());
+                </script>
+                <?php echo $titlebrand; ?>. All rights reserved. Designed with <i class="bi bi-heart-fill text-danger"></i> by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+              </div>
+              <div class="col-xl-4 justify-content-start justify-content-xl-end quick-links d-flex flex-column flex-xl-row text-center text-xl-start gap-3">
+                <a href="<?php echo $canonical_url; ?>">Terms and Conditions</a><a href="<?php echo $canonical_url; ?>">Privacy Policy</a>
+              </div>
+            </div>
+          </div>
+        </footer>
+        <!-- End Footer-->
+      </main>
+    </div>
+
+    <!-- ======= Back to Top =======-->
+    <button id="back-to-top"><i class="bi bi-arrow-up-short"></i></button>
+    <!-- End Back to top-->
+
+    <!-- ======= Javascripts =======-->
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/imagesloaded.pkgd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/isotope.pkgd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/glightbox.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/swiper-bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/purecounter.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/custom.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/aurora/send_email.js"></script>
+    <!-- End JavaScripts-->
+  </body>
+</html>
