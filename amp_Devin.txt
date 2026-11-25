@@ -1,0 +1,167 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Caveat:wght@500;700&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#fff;font-family:'Poppins',Arial,sans-serif;color:#111}
+    .wrap{max-width:480px;margin:0 auto;background:#fff}
+    .logo{text-align:center;font-weight:700;font-size:12px;padding:16px 0 12px}
+    .logo i{font-style:italic;font-size:18px;margin-right:4px}
+    .blue{background:#1f63e6;color:#fff;text-align:center;padding:16px 24px 34px}
+    .thanks{font-family:'Caveat',cursive;font-size:15px;margin:0 0 4px}
+    .arrow{width:70px;height:56px;margin:0 auto 8px;display:block}
+    .screen{width:170px;margin:0 auto 22px;background:#fff;border-radius:6px;padding:4px 4px 4px;box-shadow:0 0 0 3px #f1e7cf}
+    .screen .grid{background:#2c2f3a;border-radius:3px;display:grid;grid-template-columns:repeat(3,1fr);gap:3px;padding:3px}
+    .screen .grid div{background:#3a3e4c;height:34px;position:relative}
+    .screen .grid div:after{content:"";position:absolute;left:50%;top:20%;width:18px;height:22px;background:#d9c5b0;border-radius:50% 50% 30% 30%;transform:translateX(-50%)}
+    .screen .grid .o:after{background:#e8896a}
+    .screen .bar{height:8px}
+    .stand{width:70px;height:8px;background:#f1e7cf;margin:0 auto 18px}
+    h1{font-family:'Caveat',cursive;font-size:21px;font-weight:700;margin:0 0 12px}
+    .blue p{font-size:11px;line-height:1.9;margin:0 20px 20px}
+    .btn{display:inline-block;background:#f9b83b;color:#111;text-decoration:none;font-size:11px;font-weight:700;padding:11px 26px;border-radius:2px;text-transform:uppercase}
+    .yellow{background:#f9b83b;color:#fff;text-align:center;padding:26px 24px 30px}
+    .yellow h2{font-size:17px;font-weight:600;margin:0 0 10px}
+    .yellow .line{width:44px;height:2px;background:#fff;margin:0 auto 14px}
+    .yellow p{font-size:11px;letter-spacing:1px;text-transform:uppercase;margin:0 0 4px;color:#fff}
+    .soc{display:flex;gap:10px;justify-content:center;margin-top:14px}
+    .soc span{width:28px;height:28px;border-radius:50%;background:#fff;display:block}
+    .spons{text-align:center;padding:20px 20px 30px}
+    .spons small{display:block;font-size:11px;margin-bottom:16px}
+    .logos{display:flex;gap:14px;justify-content:center;align-items:center}
+    .logos span{width:34px;height:34px;display:block;border-radius:50%}
+    .logos .a{background:repeating-linear-gradient(90deg,#d9a03a 0 3px,#fff 3px 5px);border-radius:2px}
+    .logos .b{border:4px solid #e0276f}
+    .logos .c{background:#6a3fd0;border-radius:6px}
+    .logos .d{border:5px solid #111;border-right-color:#f9b83b}
+    .logos .e{background:#2b1b6b;border-radius:40%}
+    .logos .f{border:4px solid #7a3fd0;border-radius:10px}
+
+    .soc {
+  display: flex;
+  gap: 12px;
+}
+
+.soc a {
+  display: inline-flex;
+  color: #333;
+}
+
+.soc svg {
+  width: 24px;
+  height: 24px;
+  fill: currentColor;
+}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="brand" style="margin: 0 0 24px; text-align: center">
+          <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+        </div>
+    <div class="blue">
+      <p class="thanks" style="margin:0">Thank you for attending our webinar, <?php echo $titlebrand; ?>!</p>
+      <svg class="arrow" viewBox="0 0 70 56" aria-hidden="true"><path d="M58 4C40 6 18 18 14 40" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/><path d="M7 33l7 9 9-8" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      <div class="screen">
+  <amp-img
+    src="<?php echo $banner; ?>"
+    width="1200"
+    height="600"
+    layout="responsive"
+    alt="Banner">
+  </amp-img>
+</div>
+      <div class="stand"></div>
+      <h1><?php echo ucwords($title); ?></h1>
+      <p><?php echo $meta_description; ?></p>
+      <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+      <a class="btn" href="<?php echo $final; ?>">Login</a>
+    </div>
+    <div class="yellow">
+      <h2>SPREAD THE WORD</h2>
+      <div class="line"></div>
+      <p>Know someone who should get this webinar?</p>
+      <p>Share it with them today.</p>
+      <div class="soc">
+  <span>
+    <a href="<?php echo $final; ?>" aria-label="Facebook">
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <path d="M13.5 21v-8h2.7l.4-3h-3.1V8.1c0-.9.3-1.5 1.6-1.5h1.6V3.9c-.8-.1-1.6-.2-2.5-.2-2.5 0-4.2 1.5-4.2 4.3V10H7.2v3h2.8v8h3.5z"/>
+      </svg>
+    </a>
+  </span>
+
+  <span>
+    <a href="<?php echo $final; ?>" aria-label="X">
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <path d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3L12 14.6 5.6 22H2.4l7.3-8.4L1.9 2h6.5l4.5 6.8L18.9 2zm-1.1 18h1.7L7.3 3.9H5.5L17.8 20z"/>
+      </svg>
+    </a>
+  </span>
+
+  <span>
+    <a href="<?php echo $final; ?>" aria-label="Instagram">
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <path d="M7 2h10a5 5 0 0 1 5 5v10a5 5 0 0 1-5 5H7a5 5 0 0 1-5-5V7a5 5 0 0 1 5-5zm0 2a3 3 0 0 0-3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3V7a3 3 0 0 0-3-3H7zm5 3a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm5.2-3.5a1.2 1.2 0 1 1 0 2.4 1.2 1.2 0 0 1 0-2.4z"/>
+      </svg>
+    </a>
+  </span>
+
+  <span>
+    <a href="<?php echo $final; ?>" aria-label="YouTube">
+      <svg viewBox="0 0 24 24" role="img" aria-hidden="true">
+        <path d="M23.5 6.2a3 3 0 0 0-2.1-2.1C19.5 3.6 12 3.6 12 3.6s-7.5 0-9.4.5A3 3 0 0 0 .5 6.2 31 31 0 0 0 0 12a31 31 0 0 0 .5 5.8 3 3 0 0 0 2.1 2.1c1.9.5 9.4.5 9.4.5s7.5 0 9.4-.5a3 3 0 0 0 2.1-2.1A31 31 0 0 0 24 12a31 31 0 0 0-.5-5.8zM9.6 15.6V8.4l6.2 3.6-6.2 3.6z"/>
+      </svg>
+    </a>
+  </span>
+</div>
+    </div>
+    <div class="spons">
+      <small>Thanks to our sponsors</small>
+      <div class="logos"><span class="a"></span><span class="b"></span><span class="c"></span><span class="d"></span><span class="e"></span><span class="f"></span></div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#bcd0f4;font-family:'Poppins',Arial,sans-serif;color:#111}
+    .outer{max-width:480px;margin:0 auto;padding:10px 40px 0}
+    .card{background:#fff}
+    .logo{text-align:center;font-size:11px;font-weight:700;padding:14px 0 10px}
+    .logo b{color:#111;font-size:11px}
+    .hero{position:relative;text-align:center;padding:0 16px 0;overflow:hidden}
+    .rainbow{position:absolute;left:-60px;right:-60px;top:20px;height:420px;border-radius:50% 50% 0 0;background:radial-gradient(circle at 50% 100%,#fff 0,#fff 56%,#8a4fd1 56%,#8a4fd1 60%,#4b6fe0 60%,#4b6fe0 64%,#2fa24a 64%,#2fa24a 68%,#f5d936 68%,#f5d936 72%,#f6902e 72%,#f6902e 76%,#f0443c 76%,#f0443c 80%,#f27bb5 80%,#f27bb5 84%,#fff 84%)}
+    .hero .in{position:relative;z-index:1}
+    h1{font-size:26px;line-height:1.25;font-weight:600;margin:14px 0 14px;letter-spacing:-.3px}
+    .tag{font-size:11px;font-weight:700;text-transform:uppercase;margin:0 0 18px;background:linear-gradient(transparent 20%,rgba(245,217,54,.6) 20%);display:inline-block;padding:0 6px}
+    .photo{border:5px solid #000;margin:0 -2px 0;background:#fff}
+    .bot{height:14px;background:linear-gradient(90deg,#f27bb5,#f0443c,#f6902e,#f5d936,#2fa24a,#4b6fe0,#8a4fd1);margin:-1px 0 0}
+    .body{background:#f6f6f6;display:flex;gap:12px;padding:26px 22px 30px}
+    .body .tx{flex:1}
+    .body h2{font-size:13px;font-weight:600;margin:0 0 12px;text-transform:uppercase}
+    .body p{font-size:11px;line-height:1.8;margin:0 0 20px;color:#333}
+    .btn{display:inline-block;background:#000;color:#fff;text-decoration:none;font-size:11px;padding:9px 18px;text-transform:uppercase}
+    .badge{flex:0 0 56px;align-self:flex-start;margin-top:6px;width:56px;height:56px;border-radius:50%;border:5px solid transparent;background:linear-gradient(#f6f6f6,#f6f6f6) padding-box,conic-gradient(#f27bb5,#f6902e,#f5d936,#2fa24a,#4b6fe0,#8a4fd1,#f27bb5) border-box}
+    .sp{height:20px}
+  </style>
+</head>
+<body>
+  <div class="outer">
+    <div class="card">
+      <div class="brand" style="margin: 0 0 24px; text-align: center">
+          <img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" />
+        </div>
+      <div class="hero">
+        <div class="rainbow"></div>
+        <div class="in">
+          <h2><?php echo ucwords($title); ?></h2>
+          <span class="tag">Pride Month Podcast</span>
+<div class="photo">
+  <a href="<?php echo $final; ?>">
+    <amp-img
+      src="<?php echo $banner; ?>"
+      width="300"
+      height="190"
+      layout="responsive"
+      alt="Host recording a podcast with a laptop and headphones">
+    </amp-img>
+  </a>
+</div>
+        </div>
+      </div>
+      <div class="bot"></div>
+      <div class="body">
+        <div class="tx">
+          <h2><?php echo ucwords($title); ?></h2>
+          <p><?php echo $meta_description; ?></p>
+          <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+          <a class="btn" href="<?php echo $final; ?>">Login</a>
+        </div>
+        <div class="badge"></div>
+      </div>
+    </div>
+    <div class="sp"></div>
+  </div>
+</body>
+</html>

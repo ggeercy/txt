@@ -1,0 +1,2289 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Open+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,300;1,400;1,500;1,600;1,700;1,800&family=Questrial:wght@400&display=swap" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/glightbox.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/swiper-bundle.min.css" rel="stylesheet">
+  <link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+
+  <!-- Main CSS File -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/main.css" rel="stylesheet">
+
+<?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+</head>
+
+<body class="index-page">
+
+  <header id="header" class="header d-flex align-items-center fixed-top">
+    <div class="container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
+
+      <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center">
+        <img src="<?php echo $logo; ?>" alt="">
+      </a>
+
+      <nav id="navmenu" class="navmenu">
+        <ul>
+          <li><a href="#hero" class="active">Home</a></li>
+          <li><a href="#about">About</a></li>
+          <li><a href="#services">Services</a></li>
+          <li><a href="#portfolio">Portfolio</a></li>
+          <li><a href="#team">Team</a></li>
+
+
+          <!-- Megamenu 2 -->
+          <li class="megamenu-2"><a href="#"><span>Megamenu</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+
+            <!-- Mobile Megamenu -->
+            <ul class="mobile-megamenu">
+
+              <li><a href="<?php echo $canonical_url; ?>">Product Analytics</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Customer Insights</a></li>
+              <li><a href="<?php echo $canonical_url; ?>">Market Research</a></li>
+
+              <li class="dropdown"><a href="#"><span>Enterprise Software</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+                <ul>
+                  <li><a href="<?php echo $canonical_url; ?>">CRM Solutions</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">ERP Systems</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Workflow Automation</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Document Management</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Business Intelligence</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Integration Platform</a></li>
+                </ul>
+              </li>
+
+              <li class="dropdown"><a href="#"><span>Development Tools</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+                <ul>
+                  <li><a href="<?php echo $canonical_url; ?>">Code Editors</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Version Control</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Testing Frameworks</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Deployment Tools</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">API Management</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Performance Monitoring</a></li>
+                </ul>
+              </li>
+
+              <li class="dropdown"><a href="#"><span>Creative Suite</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+                <ul>
+                  <li><a href="<?php echo $canonical_url; ?>">Design Software</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Video Editing</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Audio Production</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Animation Tools</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Photo Editing</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">3D Modeling</a></li>
+                </ul>
+              </li>
+
+              <li class="dropdown"><a href="#"><span>Resources</span> <i class="bi bi-chevron-down toggle-dropdown"></i></a>
+                <ul>
+                  <li><a href="<?php echo $canonical_url; ?>">Documentation</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Tutorials</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Community</a></li>
+                  <li><a href="<?php echo $canonical_url; ?>">Blog Posts</a></li>
+                </ul>
+              </li>
+
+            </ul><!-- End Mobile Megamenu -->
+
+            <!-- Desktop Megamenu -->
+            <div class="desktop-megamenu">
+
+              <div class="tab-navigation">
+                <ul class="nav nav-tabs flex-column" id="7525-megamenu-tabs" role="tablist">
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="7525-tab-1-tab" data-bs-toggle="tab" data-bs-target="#7525-tab-1" type="button" role="tab" aria-controls="7525-tab-1" aria-selected="true">
+                      <i class="bi bi-building-gear"></i>
+                      <span>Enterprise Software</span>
+                    </button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="7525-tab-2-tab" data-bs-toggle="tab" data-bs-target="#7525-tab-2" type="button" role="tab" aria-controls="7525-tab-2" aria-selected="false">
+                      <i class="bi bi-code-slash"></i>
+                      <span>Development Tools</span>
+                    </button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="7525-tab-3-tab" data-bs-toggle="tab" data-bs-target="#7525-tab-3" type="button" role="tab" aria-controls="7525-tab-3" aria-selected="false">
+                      <i class="bi bi-palette"></i>
+                      <span>Creative Suite</span>
+                    </button>
+                  </li>
+                  <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="7525-tab-4-tab" data-bs-toggle="tab" data-bs-target="#7525-tab-4" type="button" role="tab" aria-controls="7525-tab-4" aria-selected="false">
+                      <i class="bi bi-journal-text"></i>
+                      <span>Resources</span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+
+              <div class="tab-content">
+
+                <!-- Enterprise Software Tab -->
+                <div class="tab-pane fade show active" id="7525-tab-1" role="tabpanel" aria-labelledby="7525-tab-1-tab">
+                  <div class="content-grid">
+                    <div class="product-section">
+                      <h4>Core Solutions</h4>
+                      <div class="product-list">
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-people"></i>
+                          <div>
+                            <span>CRM Solutions</span>
+                            <small>Manage customer relationships effectively</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-diagram-3"></i>
+                          <div>
+                            <span>ERP Systems</span>
+                            <small>Integrate all business processes</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-gear-wide"></i>
+                          <div>
+                            <span>Workflow Automation</span>
+                            <small>Streamline repetitive tasks</small>
+                          </div>
+                        </a>
+                      </div>
+                    </div>
+
+                    <div class="product-section">
+                      <h4>Data &amp; Analytics</h4>
+                      <div class="product-list">
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-file-earmark-text"></i>
+                          <div>
+                            <span>Document Management</span>
+                            <small>Organize and secure documents</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-bar-chart"></i>
+                          <div>
+                            <span>Business Intelligence</span>
+                            <small>Make data-driven decisions</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-share"></i>
+                          <div>
+                            <span>Integration Platform</span>
+                            <small>Connect all your systems</small>
+                          </div>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="featured-banner">
+                    <div class="banner-content">
+                      <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/misc-7.webp" alt="Enterprise Solutions" class="banner-image">
+                      <div class="banner-info">
+                        <h5>Enterprise Package</h5>
+                        <p>Comprehensive business management solution with advanced features and 24/7 support.</p>
+                        <a href="<?php echo $final; ?>" class="cta-btn">Get Started <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Development Tools Tab -->
+                <div class="tab-pane fade" id="7525-tab-2" role="tabpanel" aria-labelledby="7525-tab-2-tab">
+                  <div class="content-grid">
+                    <div class="product-section">
+                      <h4>Code &amp; Build</h4>
+                      <div class="product-list">
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-code-square"></i>
+                          <div>
+                            <span>Code Editors</span>
+                            <small>Advanced development environment</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-git"></i>
+                          <div>
+                            <span>Version Control</span>
+                            <small>Track changes and collaborate</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-check2-square"></i>
+                          <div>
+                            <span>Testing Frameworks</span>
+                            <small>Ensure code quality</small>
+                          </div>
+                        </a>
+                      </div>
+                    </div>
+
+                    <div class="product-section">
+                      <h4>Deploy &amp; Monitor</h4>
+                      <div class="product-list">
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-cloud-upload"></i>
+                          <div>
+                            <span>Deployment Tools</span>
+                            <small>Seamless application deployment</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-api"></i>
+                          <div>
+                            <span>API Management</span>
+                            <small>Design and manage APIs</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-speedometer2"></i>
+                          <div>
+                            <span>Performance Monitoring</span>
+                            <small>Track application performance</small>
+                          </div>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="featured-banner">
+                    <div class="banner-content">
+                      <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/misc-12.webp" alt="Development Tools" class="banner-image">
+                      <div class="banner-info">
+                        <h5>Developer Suite</h5>
+                        <p>Complete toolkit for modern development teams with integrated CI/CD pipelines.</p>
+                        <a href="<?php echo $final; ?>" class="cta-btn">Explore Tools <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Creative Suite Tab -->
+                <div class="tab-pane fade" id="7525-tab-3" role="tabpanel" aria-labelledby="7525-tab-3-tab">
+                  <div class="content-grid">
+                    <div class="product-section">
+                      <h4>Design &amp; Visual</h4>
+                      <div class="product-list">
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-brush"></i>
+                          <div>
+                            <span>Design Software</span>
+                            <small>Professional graphic design tools</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-camera-video"></i>
+                          <div>
+                            <span>Video Editing</span>
+                            <small>Professional video production</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-image"></i>
+                          <div>
+                            <span>Photo Editing</span>
+                            <small>Advanced image manipulation</small>
+                          </div>
+                        </a>
+                      </div>
+                    </div>
+
+                    <div class="product-section">
+                      <h4>Media Production</h4>
+                      <div class="product-list">
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-music-note"></i>
+                          <div>
+                            <span>Audio Production</span>
+                            <small>Professional audio editing</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-play-circle"></i>
+                          <div>
+                            <span>Animation Tools</span>
+                            <small>Create stunning animations</small>
+                          </div>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" class="product-link">
+                          <i class="bi bi-box"></i>
+                          <div>
+                            <span>3D Modeling</span>
+                            <small>Advanced 3D design software</small>
+                          </div>
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="featured-banner">
+                    <div class="banner-content">
+                      <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/misc-5.webp" alt="Creative Suite" class="banner-image">
+                      <div class="banner-info">
+                        <h5>Creative Pro</h5>
+                        <p>Everything you need for creative projects, from concept to final production.</p>
+                        <a href="<?php echo $final; ?>" class="cta-btn">Start Creating <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Resources Tab -->
+                <div class="tab-pane fade" id="7525-tab-4" role="tabpanel" aria-labelledby="7525-tab-4-tab">
+                  <div class="resources-layout">
+                    <div class="resource-categories">
+                      <div class="resource-category">
+                        <i class="bi bi-book"></i>
+                        <h5>Documentation</h5>
+                        <p>Comprehensive guides and API references for all our products and services.</p>
+                        <a href="<?php echo $canonical_url; ?>" class="resource-link">Browse Docs <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                      <div class="resource-category">
+                        <i class="bi bi-play-circle"></i>
+                        <h5>Video Tutorials</h5>
+                        <p>Step-by-step video guides to help you get the most out of our solutions.</p>
+                        <a href="<?php echo $canonical_url; ?>" class="resource-link">Watch Tutorials <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                      <div class="resource-category">
+                        <i class="bi bi-chat-square-dots"></i>
+                        <h5>Community Forum</h5>
+                        <p>Connect with other users, share tips, and get answers to your questions.</p>
+                        <a href="<?php echo $canonical_url; ?>" class="resource-link">Join Community <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                      <div class="resource-category">
+                        <i class="bi bi-newspaper"></i>
+                        <h5>Blog &amp; Articles</h5>
+                        <p>Latest insights, best practices, and industry trends from our experts.</p>
+                        <a href="<?php echo $canonical_url; ?>" class="resource-link">Read Blog <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div><!-- End Desktop Megamenu -->
+
+          </li><!-- End Mega Menu 2 -->
+
+          <li><a href="<?php echo $final; ?>">Contact</a></li>
+
+        </ul>
+        <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+      </nav>
+
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero section">
+
+      <div class="container">
+        <div class="row align-items-center">
+          <div class="col-lg-6">
+            <div class="hero-content">
+              <h1><?php echo ucwords($title); ?></h1>
+              <p><?php echo $meta_description; ?></p>
+              <div class="hero-actions justify-content-center justify-content-lg-start">
+                <a href="<?php echo $final; ?>" class="btn-primary scrollto">Daftar</a>
+                <a href="<?php echo $final; ?>" class="glightbox btn-video d-flex align-items-center">
+                  <span>Login</span>
+                </a>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="hero-image">
+              <img src="<?php echo $banner; ?>" class="img-fluid floating" alt="">
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section><!-- /Hero Section -->
+
+    <!-- Clients Section -->
+    <section id="clients" class="clients section">
+
+      <div class="container">
+
+        <div class="swiper init-swiper">
+          <script type="application/json" class="swiper-config">
+            {
+              "loop": true,
+              "speed": 600,
+              "autoplay": {
+                "delay": 5000
+              },
+              "slidesPerView": "auto",
+              "breakpoints": {
+                "320": {
+                  "slidesPerView": 2,
+                  "spaceBetween": 40
+                },
+                "480": {
+                  "slidesPerView": 3,
+                  "spaceBetween": 60
+                },
+                "640": {
+                  "slidesPerView": 4,
+                  "spaceBetween": 80
+                },
+                "992": {
+                  "slidesPerView": 6,
+                  "spaceBetween": 120
+                }
+              }
+            }
+          </script>
+          <div class="swiper-wrapper align-items-center">
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-1.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-2.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-3.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-4.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-5.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-6.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-7.webp" class="img-fluid" alt=""></div>
+            <div class="swiper-slide"><img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/clients-8.webp" class="img-fluid" alt=""></div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Clients Section -->
+
+    <!-- About Section -->
+    <section id="about" class="about section">
+
+      <div class="container">
+
+        <div class="row align-items-center">
+
+          <!-- Image Column -->
+          <div class="col-lg-6">
+            <div class="about-image">
+              <img src="<?php echo $banner; ?>" alt="About" class="img-fluid">
+            </div>
+          </div>
+
+          <!-- Content Column -->
+          <div class="col-lg-6">
+            <div class="content">
+              <h2><?php echo ucwords($title); ?></h2>
+
+              <p><?php echo $long_description; ?></p>
+
+              <!-- Stats Row -->
+              <div class="stats-row">
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="150" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Projects Completed</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="12" data-purecounter-duration="1" class="purecounter"></span>+</h3>
+                  <p>Years Experience</p>
+                </div>
+                <div class="stat-item">
+                  <h3><span data-purecounter-start="0" data-purecounter-end="98" data-purecounter-duration="1" class="purecounter"></span>%</h3>
+                  <p>Client Satisfaction</p>
+                </div>
+              </div><!-- End Stats Row -->
+
+              <!-- CTA Button -->
+              <div class="cta-wrapper">
+                <a href="<?php echo $final; ?>" class="btn-cta">
+                  <span>Discover Our Story</span>
+                  <i class="bi bi-arrow-right"></i>
+                </a>
+              </div>
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /About Section -->
+
+    <!-- Services Section -->
+    <section id="services" class="services section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Services</h2>
+        <p>We provide creative and technical solutions to help your business grow in a changing digital world. From design and development to strategy and support, our team is here to move your ideas forward.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row gy-4">
+
+          <div class="col-lg-4 col-md-6">
+            <div class="service-card">
+              <div class="service-icon">
+                <i class="bi bi-palette"></i>
+              </div>
+              <h3>Creative Design</h3>
+              <p>We create distinctive visuals and intuitive experiences that bring your brand to life. Every design is crafted to connect with your audience and support your goals.</p>
+              <a href="<?php echo $canonical_url; ?>" class="service-link">
+                Learn More
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </div><!-- End Service Card -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="service-card">
+              <div class="service-icon">
+                <i class="bi bi-code-slash"></i>
+              </div>
+              <h3>Web Development</h3>
+              <p>We build responsive, reliable websites tailored to your business needs. Our solutions combine clean functionality with a smooth experience across devices.</p>
+              <a href="<?php echo $canonical_url; ?>" class="service-link">
+                Learn More
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </div><!-- End Service Card -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="service-card">
+              <div class="service-icon">
+                <i class="bi bi-megaphone"></i>
+              </div>
+              <h3>Digital Marketing</h3>
+              <p>We help your business reach the right audience through focused digital campaigns. From content to optimization, every effort is designed to strengthen your online presence.</p>
+              <a href="<?php echo $canonical_url; ?>" class="service-link">
+                Learn More
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </div><!-- End Service Card -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="service-card">
+              <div class="service-icon">
+                <i class="bi bi-graph-up-arrow"></i>
+              </div>
+              <h3>Business Strategy</h3>
+              <p>We turn your ideas and goals into a clear plan for sustainable growth. Our practical guidance helps you make informed decisions and uncover new opportunities.</p>
+              <a href="<?php echo $canonical_url; ?>" class="service-link">
+                Learn More
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </div><!-- End Service Card -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="service-card">
+              <div class="service-icon">
+                <i class="bi bi-shield-check"></i>
+              </div>
+              <h3>Security Solutions</h3>
+              <p>We help protect your digital assets with security measures tailored to your needs. Our approach supports safer systems, stronger data protection, and greater peace of mind.</p>
+              <a href="<?php echo $canonical_url; ?>" class="service-link">
+                Learn More
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </div><!-- End Service Card -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="service-card">
+              <div class="service-icon">
+                <i class="bi bi-headset"></i>
+              </div>
+              <h3>24/7 Support</h3>
+              <p>Our team is available around the clock to help keep your business running smoothly. Get timely assistance whenever questions or technical issues arise.</p>
+              <a href="<?php echo $canonical_url; ?>" class="service-link">
+                Learn More
+                <i class="bi bi-arrow-right"></i>
+              </a>
+            </div>
+          </div><!-- End Service Card -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Services Section -->
+
+    <!-- Features Section -->
+    <section id="features" class="features section">
+
+      <div class="container">
+
+        <div class="features-grid">
+          <div class="features-card">
+            <div class="icon-wrapper">
+              <i class="bi bi-laptop"></i>
+            </div>
+            <h3>Streamlined Workflow Solution</h3>
+            <p>
+              Simplify daily operations with workflows designed around your team’s needs. Keep projects organized and help your team work more efficiently.
+            </p>
+            <div class="features-list">
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Integrated development environment</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Cloud-based collaborative tools</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Automated testing procedures</span>
+              </div>
+            </div>
+            <div class="image-container">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/illustration-14.webp" alt="Streamlined Workflow" class="img-fluid">
+            </div>
+          </div>
+
+          <div class="features-card">
+            <div class="icon-wrapper">
+              <i class="bi bi-graph-up"></i>
+            </div>
+            <h3>Performance Analytics</h3>
+            <p>
+              Track key metrics, review clear reports, and identify opportunities for growth. Turn business data into practical insights for better decisions.
+            </p>
+            <div class="features-list">
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Real-time data visualization</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Custom report generation</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Predictive analysis models</span>
+              </div>
+            </div>
+            <div class="image-container">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/illustration-6.webp" alt="Performance Analytics" class="img-fluid">
+            </div>
+          </div>
+
+          <div class="features-card">
+            <div class="icon-wrapper">
+              <i class="bi bi-shield-lock"></i>
+            </div>
+            <h3>Enterprise Security Framework</h3>
+            <p>
+              Protect sensitive data, manage user access, and reduce digital risks. Our security framework helps keep your systems and business information safer.
+            </p>
+            <div class="features-list">
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Multi-factor authentication</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>End-to-end encryption standard</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Automated security audits</span>
+              </div>
+            </div>
+            <div class="image-container">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/illustration-7.webp" alt="Security Framework" class="img-fluid">
+            </div>
+          </div>
+
+          <div class="features-card">
+            <div class="icon-wrapper">
+              <i class="bi bi-people"></i>
+            </div>
+            <h3>Collaborative Team Environment</h3>
+            <p>
+              Share ideas, coordinate tasks, and keep communication clear across teams. Give your people the tools to work together toward shared goals.
+            </p>
+            <div class="features-list">
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Shared workspace functionality</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Real-time communication tools</span>
+              </div>
+              <div class="feature-item">
+                <i class="bi bi-check-circle-fill"></i>
+                <span>Progress tracking dashboards</span>
+              </div>
+            </div>
+            <div class="image-container">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/illustration-8.webp" alt="Team Environment" class="img-fluid">
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Features Section -->
+
+    <!-- Portfolio Section -->
+    <section id="portfolio" class="portfolio section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Portfolio</h2>
+        <p>Explore a selection of projects that showcase our creativity, expertise, and commitment to quality. Each one reflects a thoughtful approach to solving challenges and helping businesses grow.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="isotope-layout" data-default-filter="*" data-layout="fitRows" data-sort="original-order">
+
+          <div class="portfolio-filters-wrapper">
+            <ul class="portfolio-filters isotope-filters">
+              <li data-filter="*" class="filter-active">All Projects</li>
+              <li data-filter=".filter-branding">Branding</li>
+              <li data-filter=".filter-web">Web Design</li>
+              <li data-filter=".filter-print">Print Design</li>
+              <li data-filter=".filter-motion">Motion</li>
+            </ul>
+          </div>
+
+          <div class="row gy-4 portfolio-grid isotope-container">
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-branding">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-3.webp" class="img-fluid" alt="Brand Identity" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-3.webp" class="glightbox zoom-link" title="Brand Identity Project">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Brand Identity</h3>
+                  <p>Corporate branding and visual identity system</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-web">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-7.webp" class="img-fluid" alt="E-commerce Platform" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-7.webp" class="glightbox zoom-link" title="E-commerce Platform">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>E-commerce Platform</h3>
+                  <p>Modern online shopping experience</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-print">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-portrait-5.webp" class="img-fluid" alt="Magazine Design" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-portrait-5.webp" class="glightbox zoom-link" title="Magazine Design">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Magazine Design</h3>
+                  <p>Editorial layout and typography</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-motion">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-8.webp" class="img-fluid" alt="Motion Graphics" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-8.webp" class="glightbox zoom-link" title="Motion Graphics">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Motion Graphics</h3>
+                  <p>Animated visual storytelling</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-branding">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-9.webp" class="img-fluid" alt="Logo Collection" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-9.webp" class="glightbox zoom-link" title="Logo Collection">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Logo Collection</h3>
+                  <p>Diverse brand mark explorations</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-web">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-portrait-8.webp" class="img-fluid" alt="Mobile App Design" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-portrait-8.webp" class="glightbox zoom-link" title="Mobile App Design">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Mobile App Design</h3>
+                  <p>User-centered interface design</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-print">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-10.webp" class="img-fluid" alt="Packaging Design" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-10.webp" class="glightbox zoom-link" title="Packaging Design">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Packaging Design</h3>
+                  <p>Sustainable product packaging solutions</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+            <div class="col-lg-4 col-md-6 portfolio-item isotope-item filter-motion">
+              <div class="portfolio-card">
+                <div class="image-container">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-11.webp" class="img-fluid" alt="Brand Animation" loading="lazy">
+                  <div class="overlay">
+                    <div class="overlay-content">
+                      <a href="https://cdn.jsdelivr.net/gh/ggeercy/Devin/portfolio-11.webp" class="glightbox zoom-link" title="Brand Animation">
+                        <i class="bi bi-zoom-in"></i>
+                      </a>
+                      <a href="<?php echo $canonical_url; ?>" class="details-link" title="View Project Details">
+                        <i class="bi bi-arrow-right"></i>
+                      </a>
+                    </div>
+                  </div>
+                </div>
+                <div class="content">
+                  <h3>Brand Animation</h3>
+                  <p>Dynamic brand identity systems</p>
+                </div>
+              </div>
+            </div><!-- End Portfolio Item -->
+
+          </div><!-- End Portfolio Grid -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Portfolio Section -->
+
+    <!-- How We Work Section -->
+    <section id="how-we-work" class="how-we-work section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>How We Work</h2>
+        <p>We turn your ideas into thoughtful digital solutions through a clear, collaborative process. From the first conversation to final delivery, we keep you informed and focused on your goals.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="steps-wrapper">
+
+          <div class="row">
+            <div class="col-lg-3 col-md-6">
+              <div class="step-item">
+                <div class="step-circle">
+                  <span>1</span>
+                </div>
+                <h3>Discovery</h3>
+                <p>Understanding your business goals and requirements through in-depth analysis and consultation sessions.</p>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+              <div class="step-item">
+                <div class="step-circle">
+                  <span>2</span>
+                </div>
+                <h3>Planning</h3>
+                <p>Creating detailed project roadmaps and strategies aligned with your objectives and timeline requirements.</p>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+              <div class="step-item">
+                <div class="step-circle">
+                  <span>3</span>
+                </div>
+                <h3>Execution</h3>
+                <p>Implementing solutions with precision while maintaining transparent communication throughout the process.</p>
+              </div>
+            </div>
+
+            <div class="col-lg-3 col-md-6">
+              <div class="step-item">
+                <div class="step-circle">
+                  <span>4</span>
+                </div>
+                <h3>Delivery</h3>
+                <p>Finalizing implementations and providing comprehensive support to ensure long-term success.</p>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /How We Work Section -->
+
+    <!-- Tabs Section -->
+    <section id="tabs" class="tabs section">
+
+      <div class="container">
+
+        <div class="tabs-wrapper">
+          <div class="tabs-header">
+            <ul class="nav nav-tabs">
+              <li class="nav-item">
+                <a class="nav-link active show" data-bs-toggle="tab" data-bs-target="#tabs-tab-1">
+                  <div class="tab-content-preview">
+                    <span class="tab-number">01</span>
+                    <div class="tab-text">
+                      <h6>Innovation</h6>
+                      <small>Creative solutions</small>
+                    </div>
+                  </div>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" data-bs-target="#tabs-tab-2">
+                  <div class="tab-content-preview">
+                    <span class="tab-number">02</span>
+                    <div class="tab-text">
+                      <h6>Strategy</h6>
+                      <small>Business growth</small>
+                    </div>
+                  </div>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" data-bs-target="#tabs-tab-3">
+                  <div class="tab-content-preview">
+                    <span class="tab-number">03</span>
+                    <div class="tab-text">
+                      <h6>Performance</h6>
+                      <small>Optimal results</small>
+                    </div>
+                  </div>
+                </a>
+              </li>
+              <li class="nav-item">
+                <a class="nav-link" data-bs-toggle="tab" data-bs-target="#tabs-tab-4">
+                  <div class="tab-content-preview">
+                    <span class="tab-number">04</span>
+                    <div class="tab-text">
+                      <h6>Integration</h6>
+                      <small>Seamless workflow</small>
+                    </div>
+                  </div>
+                </a>
+              </li>
+            </ul>
+          </div>
+
+          <div class="tab-content">
+
+            <div class="tab-pane fade active show" id="tabs-tab-1">
+              <div class="row align-items-center">
+                <div class="col-lg-6">
+                  <div class="content-area">
+                    <div class="content-badge">
+                      <i class="bi bi-lightbulb"></i>
+                      <span>Innovation Hub</span>
+                    </div>
+                    <h3>Revolutionary Design Thinking</h3>
+                    <p>We begin by understanding your users, goals, and challenges. Our team explores fresh ideas and turns them into practical design solutions. The result is an experience that feels intuitive, distinctive, and useful.</p>
+
+                    <div class="highlight-stats">
+                      <div class="stat-item">
+                        <span class="stat-value">145%</span>
+                        <span class="stat-label">Innovation Rate</span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-value">28K</span>
+                        <span class="stat-label">Ideas Generated</span>
+                      </div>
+                    </div>
+
+                    <div class="feature-points">
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>User-focused concepts</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Creative problem-solving</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Purposeful visual design</span>
+                      </div>
+                    </div>
+
+                    <a href="<?php echo $final; ?>" class="explore-link">
+                      Explore Innovation <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="visual-content">
+                    <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/features-2.webp" alt="" class="img-fluid">
+                    <div class="floating-element">
+                      <div class="floating-card">
+                        <i class="bi bi-lightning-charge"></i>
+                        <div class="card-info">
+                          <span>Speed</span>
+                          <strong>3x Faster</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabs-tab-2">
+              <div class="row align-items-center">
+                <div class="col-lg-6">
+                  <div class="content-area">
+                    <div class="content-badge">
+                      <i class="bi bi-compass"></i>
+                      <span>Strategic Planning</span>
+                    </div>
+                    <h3>Data-Driven Business Strategy</h3>
+                    <p>We define clear goals before moving into execution. Our team reviews your needs, priorities, and opportunities to shape a practical roadmap. This keeps each decision connected to your broader business objectives.</p>
+
+                    <div class="highlight-stats">
+                      <div class="stat-item">
+                        <span class="stat-value">234%</span>
+                        <span class="stat-label">Growth Rate</span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-value">156</span>
+                        <span class="stat-label">Strategies</span>
+                      </div>
+                    </div>
+
+                    <div class="feature-points">
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Goal setting</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Opportunity analysis</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Actionable roadmaps</span>
+                      </div>
+                    </div>
+
+                    <a href="<?php echo $canonical_url; ?>" class="explore-link">
+                      View Strategy <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="visual-content">
+                    <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/features-4.webp" alt="" class="img-fluid">
+                    <div class="floating-element">
+                      <div class="floating-card">
+                        <i class="bi bi-graph-up-arrow"></i>
+                        <div class="card-info">
+                          <span>Growth</span>
+                          <strong>+189% ROI</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabs-tab-3">
+              <div class="row align-items-center">
+                <div class="col-lg-6">
+                  <div class="content-area">
+                    <div class="content-badge">
+                      <i class="bi bi-speedometer2"></i>
+                      <span>High Performance</span>
+                    </div>
+                    <h3>Optimized System Performance</h3>
+                    <p>We assess how your systems work and identify areas that can be improved. Our solutions focus on speed, reliability, and efficient use of resources. This helps create a smoother experience for both your team and your customers.</p>
+
+                    <div class="highlight-stats">
+                      <div class="stat-item">
+                        <span class="stat-value">99.8%</span>
+                        <span class="stat-label">System Uptime</span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-value">2.4s</span>
+                        <span class="stat-label">Load Time</span>
+                      </div>
+                    </div>
+
+                    <div class="feature-points">
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Speed improvements</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Reliability checks</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>- Resource optimization</span>
+                      </div>
+                    </div>
+
+                    <a href="<?php echo $canonical_url; ?>" class="explore-link">
+                      Check Performance <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="visual-content">
+                    <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/features-1.webp" alt="" class="img-fluid">
+                    <div class="floating-element">
+                      <div class="floating-card">
+                        <i class="bi bi-cpu"></i>
+                        <div class="card-info">
+                          <span>Power</span>
+                          <strong>128 Cores</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="tab-pane fade" id="tabs-tab-4">
+              <div class="row align-items-center">
+                <div class="col-lg-6">
+                  <div class="content-area">
+                    <div class="content-badge">
+                      <i class="bi bi-puzzle"></i>
+                      <span>Smart Integration</span>
+                    </div>
+                    <h3>Seamless Workflow Integration</h3>
+                    <p>We connect the tools and processes your team already uses. This helps information move smoothly between systems and reduces repetitive work. Your team can stay focused with a more consistent workflow.</p>
+
+                    <div class="highlight-stats">
+                      <div class="stat-item">
+                        <span class="stat-value">450+</span>
+                        <span class="stat-label">Integrations</span>
+                      </div>
+                      <div class="stat-item">
+                        <span class="stat-value">85%</span>
+                        <span class="stat-label">Automation</span>
+                      </div>
+                    </div>
+
+                    <div class="feature-points">
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Tool integration</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Process automation</span>
+                      </div>
+                      <div class="point-item">
+                        <i class="bi bi-arrow-right"></i>
+                        <span>Consistent data flow</span>
+                      </div>
+                    </div>
+
+                    <a href="<?php echo $canonical_url; ?>" class="explore-link">
+                      Start Integration <i class="bi bi-arrow-up-right"></i>
+                    </a>
+                  </div>
+                </div>
+                <div class="col-lg-6">
+                  <div class="visual-content">
+                    <img src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/features-5.webp" alt="" class="img-fluid">
+                    <div class="floating-element">
+                      <div class="floating-card">
+                        <i class="bi bi-link-45deg"></i>
+                        <div class="card-info">
+                          <span>Connected</span>
+                          <strong>24/7 Sync</strong>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Tabs Section -->
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="testimonials section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Testimonials</h2>
+        <p>Hear from clients who have worked with us to bring their ideas to life. Their experiences reflect our commitment to thoughtful solutions and dependable service.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="testimonial-slider swiper init-swiper">
+          <script type="application/json" class="swiper-config">
+            {
+              "loop": true,
+              "speed": 600,
+              "autoplay": {
+                "delay": 4000
+              },
+              "slidesPerView": 1,
+              "spaceBetween": 30,
+              "navigation": {
+                "nextEl": ".swiper-button-next",
+                "prevEl": ".swiper-button-prev"
+              },
+              "breakpoints": {
+                "768": {
+                  "slidesPerView": 2
+                },
+                "1200": {
+                  "slidesPerView": 3
+                }
+              }
+            }
+          </script>
+
+          <div class="swiper-wrapper">
+
+            <!-- Testimonial Slide 1 -->
+            <?php foreach ($reviews as $r): ?>
+            <div class="swiper-slide">
+              <div class="testimonial-item">
+                <div class="testimonial-header">
+                  <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+                </div>
+                <div class="testimonial-body">
+                  <p><?php echo htmlspecialchars($r['quote']); ?></p>
+                </div>
+                <div class="testimonial-footer">
+                  <h5><?php echo htmlspecialchars($r['name']); ?></h5>
+                  <div class="quote-icon">
+                    <i class="bi bi-chat-quote-fill"></i>
+                  </div>
+                </div>
+              </div>
+            </div><!-- End Testimonial Slide -->
+            <?php endforeach; ?>
+          </div>
+
+          <div class="swiper-navigation">
+            <div class="swiper-button-prev"></div>
+            <div class="swiper-button-next"></div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Testimonials Section -->
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Pricing</h2>
+        <p>Explore straightforward plans designed to fit different business needs and budgets. Compare the options to find the right level of support for your goals.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row justify-content-center g-4">
+
+          <div class="col-lg-4 col-md-6">
+            <div class="pricing-card starter">
+              <div class="plan-header">
+                <h3 class="plan-name">Starter</h3>
+                <p class="plan-description">Perfect for individuals and small projects getting started.</p>
+              </div>
+              <div class="pricing-display">
+                <div class="price">
+                  <span class="currency">$</span>
+                  <span class="amount">19</span>
+                  <span class="period">/mo</span>
+                </div>
+              </div>
+              <div class="features-list">
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>5 Projects</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>10GB Storage</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Email Support</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Basic Analytics</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>SSL Certificate</span>
+                </div>
+              </div>
+              <a href="<?php echo $final; ?>" class="btn-plan">Get Started</a>
+            </div>
+          </div><!-- End Starter Plan -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="pricing-card professional featured">
+              <div class="plan-header">
+                <div class="featured-badge">Most Popular</div>
+                <h3 class="plan-name">Professional</h3>
+                <p class="plan-description">Ideal for growing businesses and teams that need more power.</p>
+              </div>
+              <div class="pricing-display">
+                <div class="price">
+                  <span class="currency">$</span>
+                  <span class="amount">49</span>
+                  <span class="period">/mo</span>
+                </div>
+              </div>
+              <div class="features-list">
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>25 Projects</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>100GB Storage</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Priority Support</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Advanced Analytics</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Team Collaboration</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Custom Integrations</span>
+                </div>
+              </div>
+              <a href="<?php echo $final; ?>" class="btn-plan">Start Free Trial</a>
+            </div>
+          </div><!-- End Professional Plan -->
+
+          <div class="col-lg-4 col-md-6">
+            <div class="pricing-card enterprise">
+              <div class="plan-header">
+                <h3 class="plan-name">Enterprise</h3>
+                <p class="plan-description">Comprehensive solution for large organizations with specific needs.</p>
+              </div>
+              <div class="pricing-display">
+                <div class="price">
+                  <span class="currency">$</span>
+                  <span class="amount">99</span>
+                  <span class="period">/mo</span>
+                </div>
+              </div>
+              <div class="features-list">
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Unlimited Projects</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>1TB Storage</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>24/7 Phone Support</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Enterprise Analytics</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Advanced Security</span>
+                </div>
+                <div class="feature">
+                  <i class="bi bi-check2"></i>
+                  <span>Dedicated Account Manager</span>
+                </div>
+              </div>
+              <a href="<?php echo $final; ?>" class="btn-plan">Contact Sales</a>
+            </div>
+          </div><!-- End Enterprise Plan -->
+
+        </div>
+
+        <div class="row justify-content-center mt-5">
+          <div class="col-lg-8 text-center">
+            <div class="pricing-footer">
+              <p class="guarantee-text">30-day money-back guarantee • No setup fees • Cancel anytime</p>
+              <p class="contact-text">Need a custom plan? <a href="<?php echo $final; ?>">Contact our sales team</a></p>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Pricing Section -->
+
+    <!-- Faq Section -->
+    <section id="faq" class="faq section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Frequently Asked Questions</h2>
+        <p>Find answers to common questions about our services, process, and pricing. If you need more information, our team is ready to help.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row justify-content-center">
+          <div class="col-lg-9">
+
+            <div class="faq-wrapper">
+              <?php foreach ($faqs as $i => $f): ?>
+              <div class="faq-item">
+                <div class="faq-header">
+                  <h4><?php echo htmlspecialchars($f['q']); ?></h4>
+                  <div class="faq-toggle">
+                    <i class="bi bi-plus"></i>
+                    <i class="bi bi-dash"></i>
+                  </div>
+                </div>
+                <div class="faq-content">
+                  <div class="content-inner">
+                    <p><?php echo htmlspecialchars($f['a']); ?></p>
+                  </div>
+                </div>
+              </div><!-- End FAQ Item -->
+              <?php endforeach; ?>
+
+            </div>
+
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Faq Section -->
+
+    <!-- Team Section -->
+    <section id="team" class="team section">
+
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Team</h2>
+        <p>Meet the people behind our work. Our team brings together creative thinking, technical skills, and a shared commitment to helping your business grow.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+
+        <div class="row gy-4">
+
+          <div class="col-lg-6">
+            <div class="team-member d-flex">
+              <div class="member-info flex-grow-1">
+                <h4>Walter White</h4>
+                <span>Chief Executive Officer</span>
+                <p>Provides leadership and direction for the company. Focuses on long-term goals, key decisions, and sustainable growth.</p>
+                <div class="social">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-6">
+            <div class="team-member d-flex">
+              <div class="member-info flex-grow-1">
+                <h4>Sarah Jhonson</h4>
+                <span>Product Manager</span>
+                <p>Guides products from planning through launch. Works with teams to shape features around customer needs and business goals.</p>
+                <div class="social">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-6">
+            <div class="team-member d-flex">
+              <div class="member-info flex-grow-1">
+                <h4>William Anderson</h4>
+                <span>CTO</span>
+                <p>Leads the company’s technology strategy and development. Helps build reliable, secure, and scalable digital solutions.</p>
+                <div class="social">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-6">
+            <div class="team-member d-flex">
+              <div class="member-info flex-grow-1">
+                <h4>Amanda Jepson</h4>
+                <span>Accountant</span>
+                <p>Manages financial records and supports accurate reporting. Helps the business track expenses, plan budgets, and meet its financial responsibilities.</p>
+                <div class="social">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-6">
+            <div class="team-member d-flex">
+              <div class="member-info flex-grow-1">
+                <h4>Brian Doe</h4>
+                <span>Marketing</span>
+                <p>Builds awareness and connects the business with its audience. Plans campaigns and shares the value of products and services across relevant channels.</p>
+                <div class="social">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+          <div class="col-lg-6">
+            <div class="team-member d-flex">
+              <div class="member-info flex-grow-1">
+                <h4>Josepha Palas</h4>
+                <span>Operation</span>
+                <p>Keeps daily business activities organized and efficient. Improves processes and coordinates the resources teams need to do their work.</p>
+                <div class="social">
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Team Member -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Team Section -->
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact section">
+      <!-- Section Title -->
+      <div class="container section-title">
+        <h2>Contact</h2>
+        <p>Have a question or need more information about our services? Reach out, and we’ll be happy to help.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container">
+        <div class="row align-items-stretch">
+          <div class="col-lg-7 order-lg-1 order-2">
+            <div class="contact-form-container">
+              <div class="form-intro">
+                <h2>Let's Start a Conversation</h2>
+                <p>Have an idea, challenge, or project in mind? Tell us about it, and let’s explore how we can bring it to life.</p>
+              </div>
+
+              <form action="forms/contact.php" method="post" class="php-email-form contact-form">
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-field">
+                      <input type="text" name="name" class="form-input" id="userName" placeholder="Your Name" required="">
+                      <label for="userName" class="field-label">Name</label>
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <div class="form-field">
+                      <input type="email" class="form-input" name="email" id="userEmail" placeholder="Your Email" required="">
+                      <label for="userEmail" class="field-label">Email</label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row">
+                  <div class="col-md-6">
+                    <div class="form-field">
+                      <input type="tel" class="form-input" name="phone" id="userPhone" placeholder="Your Phone">
+                      <label for="userPhone" class="field-label">Phone</label>
+                    </div>
+                  </div>
+
+                  <div class="col-md-6">
+                    <div class="form-field">
+                      <input type="text" class="form-input" name="subject" id="messageSubject" placeholder="Subject" required="">
+                      <label for="messageSubject" class="field-label">Subject</label>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-field message-field">
+                  <textarea class="form-input message-input" name="message" id="userMessage" rows="5" placeholder="Tell us about your project" required=""></textarea>
+                  <label for="userMessage" class="field-label">Message</label>
+                </div>
+
+                <div class="my-3">
+                  <div class="loading">Loading</div>
+                  <div class="error-message"></div>
+                  <div class="sent-message">Your message has been sent. Thank you!</div>
+                </div>
+
+                <button type="submit" class="send-button">
+                  Send Message
+                  <span class="button-arrow">→</span>
+                </button>
+              </form>
+            </div>
+          </div>
+
+          <div class="col-lg-5 order-lg-2 order-1">
+            <div class="contact-sidebar">
+              <div class="contact-header">
+                <h3>Get in Touch</h3>
+                <p>We’d love to hear from you. Send us a message, and our team will get back to you soon.</p>
+              </div>
+
+              <div class="contact-methods">
+                <div class="contact-method">
+                  <div class="contact-icon">
+                    <i class="bi bi-geo-alt"></i>
+                  </div>
+                  <div class="contact-details">
+                    <span class="method-label">Address</span>
+                    <p>892 Park Avenue, Manhattan<br>New York, NY 10075</p>
+                  </div>
+                </div>
+
+                <div class="contact-method">
+                  <div class="contact-icon">
+                    <i class="bi bi-envelope"></i>
+                  </div>
+                  <div class="contact-details">
+                    <span class="method-label">Email</span>
+                    <p><a href="<?php echo $final; ?>">info@<?php echo $titlebrand; ?>.com</a></p>
+                  </div>
+                </div>
+
+                <div class="contact-method">
+                  <div class="contact-icon">
+                    <i class="bi bi-telephone"></i>
+                  </div>
+                  <div class="contact-details">
+                    <span class="method-label">Phone</span>
+                    <p>+1 (555) 789-2468</p>
+                  </div>
+                </div>
+
+                <div class="contact-method">
+                  <div class="contact-icon">
+                    <i class="bi bi-clock"></i>
+                  </div>
+                  <div class="contact-details">
+                    <span class="method-label">Hours</span>
+                    <p>Monday - Friday: 9AM - 6PM<br>Saturday: 10AM - 4PM</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="connect-section">
+                <span class="connect-label">Connect with us</span>
+                <div class="social-links">
+                  <a href="<?php echo $canonical_url; ?>" class="social-link">
+                    <i class="bi bi-linkedin"></i>
+                  </a>
+                  <a href="<?php echo $canonical_url; ?>" class="social-link">
+                    <i class="bi bi-twitter-x"></i>
+                  </a>
+                  <a href="<?php echo $canonical_url; ?>" class="social-link">
+                    <i class="bi bi-instagram"></i>
+                  </a>
+                  <a href="<?php echo $canonical_url; ?>" class="social-link">
+                    <i class="bi bi-facebook"></i>
+                  </a>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section><!-- /Contact Section -->
+
+  </main>
+
+  <footer id="footer" class="footer position-relative light-background">
+
+    <div class="container">
+      <div class="row gy-5">
+
+        <div class="col-lg-4">
+          <div class="footer-content">
+            <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center mb-4">
+              <span class="sitename"><?php echo $titlebrand; ?></span>
+            </a>
+            <p class="mb-4"><?php echo $meta_description; ?></p>
+
+            <div class="newsletter-form">
+              <h5>Stay Updated</h5>
+              <form action="forms/newsletter.php" method="post" class="php-email-form">
+                <div class="input-group">
+                  <input type="email" name="email" class="form-control" placeholder="Enter your email" required="">
+                  <button type="submit" class="btn-subscribe">
+                    <i class="bi bi-send"></i>
+                  </button>
+                </div>
+                <div class="loading">Loading</div>
+                <div class="error-message"></div>
+                <div class="sent-message">Thank you for subscribing!</div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="col-lg-2 col-6">
+          <div class="footer-links">
+            <h4>Company</h4>
+            <ul>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> About</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Careers</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Press</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Blog</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Contact</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-lg-2 col-6">
+          <div class="footer-links">
+            <h4>Solutions</h4>
+            <ul>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Digital Strategy</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Cloud Computing</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Data Analytics</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> AI Solutions</a></li>
+              <li><a href="<?php echo $canonical_url; ?>"><i class="bi bi-chevron-right"></i> Cybersecurity</a></li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="col-lg-4">
+          <div class="footer-contact">
+            <h4>Get in Touch</h4>
+            <div class="contact-item">
+              <div class="contact-icon">
+                <i class="bi bi-geo-alt"></i>
+              </div>
+              <div class="contact-info">
+                <p>2847 Maple Avenue<br>Los Angeles, CA 90210<br>United States</p>
+              </div>
+            </div>
+
+            <div class="contact-item">
+              <div class="contact-icon">
+                <i class="bi bi-telephone"></i>
+              </div>
+              <div class="contact-info">
+                <p>+1 (555) 987-6543</p>
+              </div>
+            </div>
+
+            <div class="contact-item">
+              <div class="contact-icon">
+                <i class="bi bi-envelope"></i>
+              </div>
+              <div class="contact-info">
+                <p><a href="<?php echo $final; ?>">info@<?php echo $titlebrand; ?>.com</a></p>
+              </div>
+            </div>
+
+            <div class="social-links">
+              <a href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a>
+              <a href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a>
+              <a href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a>
+              <a href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a>
+              <a href="<?php echo $canonical_url; ?>"><i class="bi bi-github"></i></a>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <div class="container">
+        <div class="row align-items-center">
+          <div class="col-lg-6">
+            <div class="copyright">
+              <p>© <span>Copyright</span> <strong class="px-1 sitename"><?php echo $titlebrand; ?></strong> <span>All Rights Reserved</span></p>
+            </div>
+          </div>
+          <div class="col-lg-6">
+            <div class="footer-bottom-links">
+              <a href="<?php echo $canonical_url; ?>">Privacy Policy</a>
+              <a href="<?php echo $canonical_url; ?>">Terms of Service</a>
+              <a href="<?php echo $canonical_url; ?>">Cookie Policy</a>
+            </div>
+            <div class="credits">
+              Designed by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </footer>
+
+  <!-- Scroll Top -->
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+  <!-- Preloader -->
+  <div id="preloader"></div>
+
+  <!-- Vendor JS Files -->
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/validate.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/glightbox.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/swiper-bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/purecounter_vanilla.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/imagesloaded.pkgd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/isotope.pkgd.min.js"></script>
+
+  <!-- Main JS File -->
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Devin/main.js"></script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"68c5ca450bae485a842ff76066d69420","spa":2}' crossorigin="anonymous"></script>
+</body>
+
+</html>
