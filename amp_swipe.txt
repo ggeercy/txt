@@ -1,0 +1,101 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#b4f9a8;font-family:'Poppins',Arial,sans-serif;color:#111}
+    .outer{max-width:480px;margin:0 auto;padding:0 40px}
+    .wrap{background:#fff}
+    .top{background:#1f8a47 repeating-linear-gradient(0deg,transparent 0 38px,rgba(255,255,255,.08) 38px 39px),repeating-linear-gradient(90deg,transparent 0 38px,rgba(255,255,255,.08) 38px 39px);color:#fff;text-align:center;padding:30px 22px 56px}
+    .logo{font-size:17px;font-weight:600;margin-bottom:32px}
+    h1{font-size:15px;line-height:1.5;color:#000000;font-weight:600;margin:0 0 20px}
+    .top p{font-size:11px;line-height:1.8;color:#000000;margin:0 28px 22px}
+    .btn{display:inline-block;background:#b4f9a8;color:#0c3b1d;text-decoration:none;font-size:11px;font-weight:600;padding:11px 20px;border-radius:16px}
+    .photo{position:relative;margin-top:-34px}
+    .photo:before{content:"";position:absolute;left:0;right:0;top:0;height:34px;background:#1f8a47}
+    .photo .curve{position:absolute;left:0;right:0;top:0;height:40px;background:#fff;border-radius:50% 50% 0 0 / 100% 100% 0 0;z-index:1}
+    .photo amp-img{display:block}
+    .rate{text-align:center;padding:26px 24px 10px}
+    .rate h2{font-size:11px;line-height:1.6;font-weight:500;margin:0 0 14px}
+    .rate p{font-size:11px;margin:0 0 26px;color:#444}
+    .card{display:flex;gap:12px;background:#d9f2ad;margin:0 16px 24px;padding:10px;align-items:center}
+    .card .im{flex:0 0 40%}
+    .card .tx{flex:1}
+    .card small{display:block;font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;color:#444}
+    .card h3{font-size:11px;line-height:1.4;font-weight:500;margin:0 0 8px}
+    .card p{font-size:11px;line-height:1.7;margin:0 0 10px;color:#333}
+    .card a{font-size:11px;color:#111;text-decoration:underline}
+  </style>
+</head>
+<body>
+  <div class="outer">
+    <div class="wrap">
+      <div class="top">
+        <div class="logo"><img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" /></div>
+        <h1><?php echo ucwords($title); ?></h1>
+        <p><?php echo $meta_description; ?></p>
+        <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+        <a class="btn" href="<?php echo $final; ?>">Login</a>
+      </div>
+      <div class="photo">
+        <span class="curve"></span>
+        <amp-img src="<?php echo $banner; ?>" width="326" height="190" layout="responsive" alt="Smiling woman with curly hair working at a desk"></amp-img>
+      </div>
+      <div class="rate">
+        <h2>See your rate without affecting<br>your credit score</h2>
+        <p>No hidden fees. No pressure.</p>
+      </div>
+      <div class="card">
+        <div class="im"><amp-img src="<?php echo $banner; ?>" width="110" height="110" layout="responsive" alt="Person in a headband studying at a desk"></amp-img></div>
+        <div class="tx">
+          <small>Education</small>
+          <h3>Loans That Support Your Goals</h3>
+          <p>Borrow with confidence for tuition, books or training, with flexible terms and clear repayment plans.</p>
+          <a href="<?php echo $final; ?>">Explore</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,861 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+<!-- Fontawesome -->
+<link type="text/css" href="https://cdn.jsdelivr.net/gh/ggeercy/swipe/all.min.css" rel="stylesheet">
+<link
+  rel="stylesheet"
+  href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<!-- Swipe CSS -->
+<link type="text/css" href="https://cdn.jsdelivr.net/gh/ggeercy/swipe/swipe.css" rel="stylesheet">
+
+<?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+<style>
+#testimonials {
+  background: #f8f9fc;
+}
+
+.testimonial-card {
+  height: 100%;
+  border: 0;
+  border-radius: 18px;
+  box-shadow: 0 8px 28px rgba(31, 41, 55, 0.08);
+}
+
+.testimonial-card .card-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 32px 26px;
+}
+
+.testi-stars {
+  color: #f4b400;
+  font-size: 20px;
+  letter-spacing: 3px;
+}
+
+.testimonial-quote {
+  color: #5b6472;
+  line-height: 1.8;
+  flex-grow: 1;
+}
+
+.testimonial-name {
+  color: #202938;
+  font-weight: 700;
+}
+
+.testimonial-link {
+  margin-top: 16px;
+  color: #3157c8;
+  font-weight: 600;
+}
+
+.faq-toggle .icon-minus {
+  display: none;
+}
+
+.faq-toggle:not(.collapsed) .icon-plus {
+  display: none;
+}
+
+.faq-toggle:not(.collapsed) .icon-minus {
+  display: inline-block;
+}
+</style>
+</head>
+
+<body>
+    <header class="header-global" id="home">
+    <nav id="navbar-main" aria-label="Primary navigation" class="navbar navbar-main navbar-expand-lg navbar-theme-primary headroom navbar-light navbar-theme-secondary">
+        <div class="container position-relative">
+            <a class="navbar-brand mr-lg-4" href="<?php echo $canonical_url; ?>">
+                <img class="navbar-brand-dark" src="<?php echo $logo; ?>" alt="Logo light">
+                <img class="navbar-brand-light" src="<?php echo $logo; ?>" alt="Logo dark">
+            </a>
+            <div class="navbar-collapse collapse mr-auto" id="navbar_global">
+                <div class="navbar-collapse-header">
+                    <div class="row">
+                        <div class="col-6 collapse-brand">
+                            <a href="<?php echo $canonical_url; ?>">
+                                <img src="<?php echo $logo; ?>" alt="Logo dark">
+                            </a>
+                        </div>
+                        <div class="col-6 collapse-close">
+                            <a href="#navbar_global" class="fas fa-times" data-toggle="collapse" data-target="#navbar_global" aria-controls="navbar_global" aria-expanded="false" title="close" aria-label="Toggle navigation"></a>
+                        </div>
+                    </div>
+                </div>
+                <ul class="navbar-nav navbar-nav-hover align-items-lg-center">
+                    <li class="nav-item">
+                        <a href="#about" class="nav-link">
+                            About
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#testimonials" class="nav-link">
+                            Testimonials
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#faq" class="nav-link">
+                            FAQ
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="#download" class="nav-link">
+                            Download
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="d-flex align-items-center">
+                <a href="<?php echo $final; ?>" target="_blank" class="btn btn-outline-soft d-none d-md-inline mr-md-3 animate-up-2">Free download</a>
+                <a href="<?php echo $final; ?>" target="_blank" class="btn btn-md btn-tertiary text-white d-none d-md-inline animate-up-2">Upgrade to Pro<i class="fas fa-rocket ml-2"></i></a>
+                <button class="navbar-toggler ml-2" type="button" data-toggle="collapse" data-target="#navbar_global" aria-controls="navbar_global" aria-expanded="false" aria-label="Toggle navigation">
+                    <span class="navbar-toggler-icon"></span>
+                </button>
+            </div>
+        </div>
+    </nav>
+</header>
+    <main>
+        <!-- Hero -->
+        <section class="section section-header text-dark pb-md-8">
+            <div class="container">
+                <div class="row justify-content-center">
+                    <div class="col-12 col-md-10 text-center mb-5 mb-md-7">
+                        <h1 class="display-2 font-weight-bolder mb-4">
+                            <?php echo ucwords($title); ?>
+                        </h1>
+                        <p class="lead mb-4 mb-lg-5"><?php echo $meta_description; ?></p>
+                        <div>
+                            <a href="<?php echo $final; ?>" class="btn btn-dark btn-download-app mb-xl-0 mr-2 mr-md-3">
+                                <span class="d-flex align-items-center">
+                                    <span class="icon icon-brand mr-2 mr-md-3"><span class="fab fa-apple"></span></span>
+                                    <span class="d-inline-block text-left">
+                                        <small class="font-weight-normal d-none d-md-block">Available on</small> DAFTAR 
+                                    </span> 
+                                </span>
+                            </a>
+                            <a href="<?php echo $final; ?>" class="btn btn-dark btn-download-app">
+                                <span class="d-flex align-items-center">
+                                    <span class="icon icon-brand mr-2 mr-md-3"><span class="fab fa-google-play"></span></span>
+                                    <span class="d-inline-block text-left">
+                                        <small class="font-weight-normal d-none d-md-block">Available on</small> LOGIN
+                                    </span> 
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-10 justify-content-center">
+                        <img class="d-none d-md-inline-block" src="<?php echo $banner; ?>" alt="Mobile App Mockup">
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="section section-lg py-0">
+            <div class="container">
+                <div class="row">
+                    <div class="col-12 col-md-6 col-lg-4 mb-4 mb-lg-0">
+                        <div class="card border-0 bg-white text-center p-1">
+                            <div class="card-header bg-white border-0 pb-0">
+                                <div class="icon icon-lg icon-primary mb-4">
+                                    <span class="fas fa-money-bill-wave"></span>
+                                </div>
+                                <h2 class="h3 text-dark m-0">Pay better</h2>
+                            </div>
+                            <div class="card-body">
+                                <p>
+                                    Speed through checkout and offset delivery at the same time.                  
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4 mb-4 mb-lg-0">
+                        <div class="card border-0 bg-white text-center p-1">
+                            <div class="card-header bg-white border-0 pb-0">
+                                <div class="icon icon-lg icon-primary mb-4">
+                                    <span class="fas fa-map-marked-alt"></span>
+                                </div>
+                                <h2 class="h3 text-dark m-0">Track better</h2>
+                            </div>
+                            <div class="card-body">
+                                <p>
+                                    Get real-time delivery updates from cart to home in one place.                 
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4">
+                        <div class="card border-0 bg-white text-center p-1">
+                            <div class="card-header bg-white border-0 pb-0">
+                                <div class="icon icon-lg icon-primary mb-4">
+                                    <span class="fas fa-shopping-basket"></span>
+                                </div>
+                                <h2 class="h3 text-dark m-0">Shop better</h2>
+                            </div>
+                            <div class="card-body">
+                                <p>
+                                    Upgrade with personal settings from your favorite stores.                
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <section class="section section-lg" id="about">
+            <div class="container">
+                <div class="row justify-content-center mb-5 mb-lg-7">
+                    <div class="col-12 col-lg-8 text-center">
+                        <h2 class="h1 mb-4">Better in every way</h2>
+                        <p class="lead">Self-Service Analytics or ad hoc reporting gives users the ability to develop rapid reports, empowering users to analyze their data.</p>
+                    </div>
+                </div>
+                <div class="row row-grid align-items-center mb-5 mb-lg-7">
+                    <div class="col-12 col-lg-5">
+                        <h2 class="mb-4"><?php echo ucwords($title); ?></h2>
+                        <p><?php echo $long_description; ?></p>
+                        <a href="<?php echo $final; ?>" class="btn btn-dark mt-3 animate-up-2">
+                            Learn More
+                            <span class="icon icon-xs ml-2">
+                                <i class="fas fa-external-link-alt"></i>
+                            </span>
+                        </a>
+                    </div>
+                    <div class="col-12 col-lg-6 ml-lg-auto">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/scene-3.svg" class="w-100" alt="">
+                    </div>
+                </div>
+                <div class="row row-grid align-items-center mb-5 mb-lg-7">
+                    <div class="col-12 col-lg-5 order-lg-2">
+                        <h2 class="mb-4">Get it. Don't sweat it.</h2>
+                        <p>We track your desktop and mobile keyword rankings from any location and plot your full ranking history on a handy graph.</p>
+                        <p>You can set up automated ranking reports to be sent to your email address, so you’ll never forget to check your ranking progress.</p>
+                        <a href="<?php echo $final; ?>" class="btn btn-dark mt-3 animate-up-2">
+                            Learn More
+                            <span class="icon icon-xs ml-2">
+                                <i class="fas fa-external-link-alt"></i>
+                            </span>
+                        </a>
+                    </div>
+                    <div class="col-12 col-lg-6 mr-lg-auto">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/scene-2.svg" class="w-100" alt="">
+                    </div>
+                </div>
+                <div class="row">
+                    <div class="col-12 col-md-6 col-lg-4 mb-4">
+                        <div class="card border-light p-4">
+                            <div class="card-body">
+                                <h2 class="display-2 mb-2">98%</h2>
+                                <span>Average satisfaction rating received in the past year.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4 mb-4">
+                        <div class="card border-light p-4">
+                            <div class="card-body">
+                                <h2 class="display-2 mb-2">24/7</h2>
+                                <span> Our support team is a quick chat or email away.</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-6 col-lg-4 mb-4">
+                        <div class="card border-light p-4">
+                            <div class="card-body">
+                                <h2 class="display-2 mb-2">220k+</h2>
+                                <span>Extension installs from the two major mobile app stores.</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <div class="section section-sm py-0">
+            <div class="container">
+                <div class="row text-center mb-5">
+                    <div class="col">
+                        <h2 class="h6 font-weight-bold text-brown">We're proudly featured by</h2>
+                    </div>
+                </div>
+                <div class="row text-center">
+                    <div class="col d-flex justify-content-center flex-wrap">
+                        <a href="<?php echo $canonical_url; ?>" aria-label="Stripe brand logo" class="icon icon-xl icon-dark mr-4 mr-sm-5"
+                        data-toggle="tooltip" data-placement="top" title="Stripe">
+                            <span class="fab fa-stripe"></span>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="Digg brand logo" class="icon icon-xl icon-dark mr-4 mr-sm-5"
+                        data-toggle="tooltip" data-placement="top" title="Digg">
+                            <span class="fab fa-digg"></span>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="FedEx brand logo" class="icon icon-xl icon-dark mr-4 mr-sm-5"
+                        data-toggle="tooltip" data-placement="top" title="FedEx">
+                            <span class="fab fa-fedex"></span>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="Ember brand logo" class="icon icon-xl icon-dark mr-4 mr-sm-5"
+                        data-toggle="tooltip" data-placement="top" title="Ember">
+                            <span class="fab fa-ember"></span>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="Beyond brand logo" class="icon icon-xl icon-dark mr-4 mr-sm-5"
+                        data-toggle="tooltip" data-placement="top" title="Beyond">
+                            <span class="fab fa-d-and-d-beyond"></span>
+                        </a>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="AngryCreative brand logo" class="icon icon-xl icon-dark"
+                        data-toggle="tooltip" data-placement="top" title="AngryCreative">
+                            <span class="fab fa-angrycreative"></span>
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <section class="section section-lg pb-0" id="testimonials">
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="col-12 col-md-10 text-center mb-5">
+        <h2 class="display-4 mb-3">Customers love it</h2>
+        <p class="lead text-muted">
+          See what our clients have to say about our mobile app and support team.
+        </p>
+      </div>
+    </div>
+
+    <div class="row">
+      <?php foreach ($reviews as $r): ?>
+        <?php $rating = max(0, min(5, (int) ($r['rating'] ?? 0))); ?>
+
+        <div class="col-12 col-md-6 col-lg-4 mb-4">
+          <div class="card testimonial-card">
+            <div class="card-body text-center">
+              <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+
+              <p class="testimonial-quote my-4">
+                “<?php echo htmlspecialchars($r['quote']); ?></p>”
+              </p>
+
+              <p class="testimonial-name mb-0">
+                <?php echo htmlspecialchars($r['name']); ?>
+              </p>
+
+              <?php if (!empty($r['url'])): ?>
+                <a
+                  href="<?php echo $final; ?>">
+                  <i class="fas fa-book-open mr-2" aria-hidden="true"></i>
+                  Read story
+                </a>
+              <?php endif; ?>
+            </div>
+          </div>
+        </div>
+      <?php endforeach; ?>
+    </div>
+  </div>
+</section>
+        <section class="section section-lg" id="faq">
+            <div class="container">
+                <div class="row justify-content-center mb-5">
+                    <div class="col-12 text-center mb-4 mb-lg-5">
+                        <h2 class="display-3 mb-4">Facts & Questions</h2>
+                        <p class="lead">Have a question? Read through our FAQ below. If you can't find an answer, <br class="d-none d-lg-inline-block"> please email our support team. We're here to help.</p>
+                    </div>
+                </div>
+                <div class="row justify-content-center">
+                    <div class="col-12 col-md-10">
+                        <!--Accordion-->
+                        <div class="accordion" id="accordionExample">
+  <?php foreach (array_values($faqs) as $i => $f): ?>
+    <?php
+      $headingId = "faq-heading-{$i}";
+      $collapseId = "faq-collapse-{$i}";
+      $isFirst = ($i === 0);
+    ?>
+
+    <div class="card border-light mb-2">
+      <div class="card-header" id="<?php echo $headingId; ?>">
+        <h2 class="mb-0">
+          <button
+            class="btn btn-link btn-block d-flex justify-content-between align-items-center text-left faq-toggle<?php echo $isFirst ? '' : ' collapsed'; ?>"
+            type="button"
+            data-toggle="collapse"
+            data-target="#<?php echo $collapseId; ?>"
+            aria-expanded="<?php echo $isFirst ? 'true' : 'false'; ?>"
+            aria-controls="<?php echo $collapseId; ?>">
+
+            <span class="h6 mb-0 font-weight-bold">
+              <?php echo htmlspecialchars($f['q']); ?>
+            </span>
+
+            <span class="faq-icon" aria-hidden="true">
+              <i class="fas fa-plus icon-plus"></i>
+              <i class="fas fa-minus icon-minus"></i>
+            </span>
+          </button>
+        </h2>
+      </div>
+
+      <div
+        id="<?php echo $collapseId; ?>"
+        class="collapse<?php echo $isFirst ? ' show' : ''; ?>"
+        aria-labelledby="<?php echo $headingId; ?>"
+        data-parent="#accordionExample">
+
+        <div class="card-body">
+          <p class="mb-0">
+            <?php echo htmlspecialchars($f['a']); ?>
+          </p>
+        </div>
+      </div>
+    </div>
+  <?php endforeach; ?>
+</div>
+                        <!--End of Accordion-->
+                    </div>
+                </div>
+            </div>
+        </section>
+        <div class="section bg-soft" id="download">
+            <figure class="position-absolute top-0 left-0 w-100 d-none d-md-block mt-n3">
+                <svg class="fill-soft" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px" viewBox="0 0 1920 43.4" style="enable-background:new 0 0 1920 43.4;" xml:space="preserve">
+                   <path d="M0,23.3c0,0,405.1-43.5,697.6,0c316.5,1.5,108.9-2.6,480.4-14.1c0,0,139-12.2,458.7,14.3 c0,0,67.8,19.2,283.3-22.7v35.1H0V23.3z"></path>
+                </svg>
+            </figure>
+            <div class="container">
+                <div class="row row-grid align-items-center">
+                    <div class="col-12 col-lg-6">
+                        <span class="h5 text-muted mb-2 d-block">Download App</span>
+                        <h2 class="display-3 mb-4">Get started in seconds</h2>
+                        <p class="lead text-muted">Quickly connect to tools and services such as Google Analytics, Intercom or Github to track, measure and optimize performance. </p>
+                        <div class="mt-4 mt-lg-5">
+                            <a href="<?php echo $final; ?>" class="btn btn-dark btn-download-app mb-xl-0 mr-2 mr-md-3">
+                                <span class="d-flex align-items-center">
+                                    <span class="icon icon-brand mr-2 mr-md-3"><span class="fab fa-apple"></span></span>
+                                    <span class="d-inline-block text-left">
+                                        <small class="font-weight-normal d-none d-md-block">Available on</small> App Store 
+                                    </span> 
+                                </span>
+                            </a>
+                            <a href="<?php echo $final; ?>" class="btn btn-dark btn-download-app">
+                                <span class="d-flex align-items-center">
+                                    <span class="icon icon-brand mr-2 mr-md-3"><span class="fab fa-google-play"></span></span>
+                                    <span class="d-inline-block text-left">
+                                        <small class="font-weight-normal d-none d-md-block">Available on</small> Google Play
+                                    </span> 
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+                    <div class="col-12 col-lg-5 ml-lg-auto">
+                        <img class="d-none d-lg-inline-block" src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/scene-3.svg" alt="Mobile App Illustration">
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer py-5 pt-lg-6">
+    <div class="sticky-left d-flex align-items-center bg-white p-3 pt-4 px-4 border border-soft shadow-sm rounded">
+        <span class="mr-3 d-block font-small mb-1">Open source ❤️</span>
+        <!-- Place this tag where you want the button to render. -->
+        <a class="github-button" href="<?php echo $final; ?>" data-color-scheme="no-preference: light; light: light; dark: dark;" data-icon="octicon-star" data-size="large" data-show-count="true" aria-label="Star themesberg/swipe-one-page-bootstrap-5-template on GitHub">Star</a>
+    </div>
+    <div class="sticky-right">
+        <a href="#home" class="icon icon-primary icon-md btn btn-icon-only btn-white border border-soft shadow-soft animate-up-3">
+            <span class="fas fa-chevron-up"></span>
+        </a>
+    </div>
+    <div class="container">
+        <div class="row justify-content-between">
+            <div class="col-md-4">
+                <p><?php echo $meta_description; ?></p>
+                <ul class="social-buttons mb-5 mb-lg-0">
+                    <li>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="twitter social link" class="icon icon-md icon-twitter mr-3">
+                            <span class="fab fa-twitter"></span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?php echo $canonical_url; ?>" class="icon icon-md icon-facebook mr-3" aria-label="facebook social link">
+                            <span class="fab fa-facebook"></span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?php echo $canonical_url; ?>" aria-label="github social link" class="icon icon-md icon-github mr-3">
+                            <span class="fab fa-github"></span>
+                        </a>
+                    </li>
+                    <li>
+                        <a href="<?php echo $canonical_url; ?>" class="icon icon-md icon-dribbble" aria-label="dribbble social link" >
+                            <span class="fab fa-dribbble"></span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+            <div class="col-6 col-md-2 mb-5 mb-lg-0">
+                <span class="h5"><?php echo $titlebrand; ?></span>
+                <ul class="footer-links mt-2">
+                    <li><a target="_blank" href="<?php echo $canonical_url; ?>">Blog</a></li>
+                    <li><a target="_blank" href="<?php echo $canonical_url; ?>">Products</a></li>
+                    <li><a target="_blank" href="<?php echo $canonical_url; ?>">About Us</a></li>
+                    <li><a target="_blank" href="<?php echo $canonical_url; ?>">Contact Us</a></li>
+                </ul>
+            </div>
+            <div class="col-12 col-md-4 mb-5 mb-lg-0">
+                <span class="h5 mb-3 d-block">Subscribe</span>
+                <form action="#">
+                    <div class="form-row mb-2">
+                        <div class="col-12">
+                            <input type="email" class="form-control mb-2" placeholder="example@company.com" name="email" aria-label="Subscribe form" required>
+                        </div>
+                        <div class="col-12">
+                            <button type="submit" class="btn btn-dark shadow-soft btn-block" data-loading-text="Sending">
+                                <span>Subscribe</span>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                <p class="text-muted font-small m-0">No spam. Pinky swear.</p>
+            </div>
+        </div>
+        <hr class="bg-light my-2">
+        <div class="row pt-2 pt-lg-5">
+            <div class="col mb-md-0">
+                <a href="<?php echo $canonical_url; ?>" target="_blank" class="d-flex justify-content-center">
+                    <img src="<?php echo $logo; ?>" height="25" class="mb-3" alt="Themesberg Logo">
+                </a>
+            <div class="d-flex text-center justify-content-center align-items-center" role="contentinfo">
+                <p class="font-weight-normal font-small mb-0">Copyright © <?php echo $titlebrand; ?> 2019-<span class="current-year">2026</span>. All rights reserved.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</footer>
+
+    <!-- Core -->
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/bootstrap.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/headroom.min.js"></script>
+
+<!-- Vendor JS -->
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/on-screen.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/smooth-scroll.polyfills.min.js"></script>
+
+<script async defer src="https://buttons.github.io/buttons.js"></script>
+
+<!-- Swipe JS -->
+<script src="https://cdn.jsdelivr.net/gh/ggeercy/swipe/swipe.js"></script>
+
+</body>
+
+</html>

@@ -1,0 +1,215 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#fafafa;font-family:'Poppins',Arial,sans-serif;color:#111}
+    .wrap{max-width:340px;margin:0 auto;padding:8px 0 30px}
+    .card{background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 6px rgba(0,0,0,.12)}
+    .hero{position:relative;background:#888}
+    .hero .ov{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;padding-top:14px}
+    .chip{background:#fbb912;color:#111;font-size:11px;font-weight:600;padding:5px 12px;border-radius:10px;margin-bottom:12px}
+    .ov h1{margin:0 0 14px;color:#fff;font-size:30px;font-weight:600;letter-spacing:-.5px}
+    .btn{display:inline-block;background:#fbb912;color:#111;text-decoration:none;font-size:11px;font-weight:600;padding:9px 20px}
+    .wave{height:22px;background:#fbb912;position:relative;margin-top:-1px}
+    .wave:before{content:"";position:absolute;left:0;right:0;top:-12px;height:14px;background:#fbb912;clip-path:polygon(0 70%,40% 80%,50% 0,60% 80%,100% 70%,100% 100%,0 100%)}
+    .exp{text-align:center;padding:18px 22px 22px}
+    .exp h2{font-size:14px;font-weight:500;margin:0 0 12px}
+    .exp p{font-size:11px;line-height:1.8;margin:0 0 20px;color:#333}
+    .ic{display:flex;justify-content:space-around}
+    .ic div{font-size:11px;font-weight:500}
+    .ic i{display:block;width:28px;height:28px;margin:0 auto 8px;background:#fbc531;clip-path:polygon(50% 0,62% 14%,80% 10%,84% 28%,100% 38%,90% 54%,98% 72%,80% 78%,72% 96%,54% 88%,38% 100%,30% 82%,10% 82%,12% 62%,0 48%,14% 34%,12% 16%,32% 16%)}
+    .ag{text-align:center;margin-top:22px}
+    .ag h3{font-size:11px;font-weight:500;margin:0 0 12px}
+    .row{display:flex;border:1px solid #444;margin:0 0 8px;background:#fff;height:33px}
+    .row .t{flex:0 0 74px;background:#fbb912;font-size:15px;font-weight:500;display:flex;align-items:center;justify-content:center;border-right:1px solid #444}
+    .row .d{flex:1;text-align:left;padding:7px 8px;font-size:11px;line-height:1.4}
+    .row .d small{display:block;font-size:11px;color:#2b6cd8;text-transform:uppercase}
+
+    .agenda {
+  max-width: 640px;
+  margin: 24px auto;
+  padding: 24px;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #e5e7eb;
+  border-radius: 16px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  font-family: Arial, sans-serif;
+}
+
+.agenda h2 {
+  margin: 0 0 18px;
+  color: #111827;
+  font-size: 24px;
+}
+
+.agenda-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.agenda-item {
+  display: flex;
+  gap: 18px;
+  padding: 15px 0;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.agenda-item:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+.agenda-time {
+  flex: 0 0 82px;
+  color: #2563eb;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.agenda-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #6b7280;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.agenda-title {
+  margin: 0;
+  color: #1f2937;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .agenda {
+    margin: 16px 12px;
+    padding: 20px;
+  }
+
+  .agenda-item {
+    gap: 12px;
+  }
+
+  .agenda-time {
+    flex-basis: 70px;
+  }
+}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="logo"><img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" /></div>
+    <div class="card">
+      <div class="hero">
+        <amp-img src="<?php echo $banner; ?>" width="294" height="214" layout="responsive" alt="Students standing together outside a campus building"></amp-img>
+        <div class="ov">
+          <span class="chip">Save the date</span>
+        </div>
+      </div>
+      <div class="wave"></div>
+      <div class="exp">
+          <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+          <a class="btn" href="<?php echo $final; ?>">Login</a>
+        <h2><?php echo ucwords($title); ?></h2>
+        <p><?php echo $meta_description; ?></p>
+        <div class="ic">
+          <div><i></i>Campus Tours</div>
+          <div><i></i>Meet Faculty</div>
+          <div><i></i>Info Sessions</div>
+        </div>
+      </div>
+    </div>
+    <section class="agenda" aria-labelledby="agenda-title">
+  <h2 id="agenda-title">Agenda</h2>
+
+  <div class="agenda-list">
+    <div class="agenda-item">
+      <time class="agenda-time" datetime="10:00">10:00 AM</time>
+      <div>
+        <span class="agenda-label">Welcome</span>
+        <h3 class="agenda-title">Welcome &amp; Check-in</h3>
+      </div>
+    </div>
+
+    <div class="agenda-item">
+      <time class="agenda-time" datetime="11:00">11:00 AM</time>
+      <div>
+        <span class="agenda-label">Tour</span>
+        <h3 class="agenda-title">Campus Tour</h3>
+      </div>
+    </div>
+
+    <div class="agenda-item">
+      <time class="agenda-time" datetime="12:00">12:00 PM</time>
+      <div>
+        <span class="agenda-label">Lunch</span>
+        <h3 class="agenda-title">Student Panel Lunch</h3>
+      </div>
+    </div>
+
+    <div class="agenda-item">
+      <time class="agenda-time" datetime="13:00">1:00 PM</time>
+      <div>
+        <span class="agenda-label">Session</span>
+        <h3 class="agenda-title">Info Session</h3>
+      </div>
+    </div>
+
+    <div class="agenda-item">
+      <time class="agenda-time" datetime="14:00">2:00 PM</time>
+      <div>
+        <span class="agenda-label">Closing</span>
+        <h3 class="agenda-title">Student Q&amp;A</h3>
+      </div>
+    </div>
+  </div>
+</section>
+  </div>
+</body>
+</html>
