@@ -1,0 +1,100 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+?>
+
+<!doctype html>
+<html amp lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta content="ie=edge" http-equiv="X-UA-Compatible" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+    <title><?php echo ucwords($title); ?></title>
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="robots" content="index, follow" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta itemprop="name" content="<?php echo $titlebrand; ?>" />
+    <meta itemprop="description" content="<?php echo $meta_description; ?>" />
+    <meta itemprop="image" content="<?php echo $banner; ?>" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:creator" content="<?php echo $titlebrand; ?>" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:image" content="<?php echo $banner; ?>" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="icon" type="image/webp" href="<?php echo $favicon; ?>" sizes="16x16" />
+
+
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap">
+  <style amp-boilerplate>body{-webkit-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-moz-animation:-amp-start 8s steps(1,end) 0s 1 normal both;-ms-animation:-amp-start 8s steps(1,end) 0s 1 normal both;animation:-amp-start 8s steps(1,end) 0s 1 normal both}@-webkit-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-moz-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-ms-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@-o-keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}@keyframes -amp-start{from{visibility:hidden}to{visibility:visible}}</style><noscript><style amp-boilerplate>body{-webkit-animation:none;-moz-animation:none;-ms-animation:none;animation:none}</style></noscript>
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <style amp-custom>
+    *{box-sizing:border-box}
+    body{margin:0;background:#f4f4fc;font-family:'Poppins',Arial,sans-serif;color:#1f1a8c}
+    .outer{max-width:480px;margin:0 auto;padding:0 44px}
+    .wrap{background:#fff}
+    .logo{text-align:center;font-size:11px;padding:10px 0;color:#1f1a8c}
+    .hero{background:linear-gradient(180deg,#e7ebff 0,#b4bdf0 100%);text-align:center;padding:20px 24px 0;position:relative}
+    h1{font-size:25px;line-height:1.35;font-weight:700;margin:0 0 14px;color:#1f1a8c}
+    .hero p{font-size:11px;line-height:1.7;margin:0 24px 16px;color:#2b2b7a}
+    .btn{display:inline-block;background:#2a1f8f;color:#fff;text-decoration:none;font-size:11px;font-weight:600;padding:10px 24px;border-radius:14px}
+    .cardwrap{position:relative;height:290px;margin-top:6px}
+    .cc{position:absolute;left:50%;top:6px;width:170px;height:250px;margin-left:-96px;background:#4a52e0;border-radius:10px;transform:rotate(14deg);box-shadow:0 14px 26px rgba(40,40,140,.35)}
+    .chip{position:absolute;left:68px;top:26px;width:20px;height:24px;background:#9a9ab5;border-radius:3px}
+    .m1,.m2{position:absolute;bottom:14px;width:26px;height:26px;border-radius:50%}
+    .m1{right:34px;background:#cfd2ff}
+    .m2{right:18px;background:#6b73ec}
+    .cc small{position:absolute;left:12px;bottom:12px;font-size:11px;color:#c6c9ff}
+    .white{background:#fff;padding:0 22px 26px;text-align:center;margin-top:-1px;position:relative}
+    .white:before{content:"";position:absolute;left:0;right:0;top:-40px;height:40px;background:#fff}
+    .intro{font-size:11px;line-height:1.9;font-weight:600;margin:0 8px 22px;color:#1f1a8c;position:relative;padding-top:8px}
+    .cols{display:flex;gap:8px;position:relative}
+    .col{flex:1;background:#f5f6ff;border-radius:6px;padding:12px 8px 14px;text-align:center;font-size:11px;line-height:1.5;color:#2b2b7a}
+    .col i{display:block;width:16px;height:16px;border-radius:50%;background:#dfe3ff;margin:0 auto 8px;border:1px solid #9aa2f0}
+    .col b{display:block;font-size:11px;margin-bottom:6px;color:#1f1a8c}
+    .sp{height:24px}
+  </style>
+</head>
+<body>
+  <div class="outer">
+    <div class="wrap">
+      <div class="logo"><img src="<?php echo $logo; ?>" alt="Char &amp; Cinders logo" style="display: block; width: 160px; max-width: 100%; height: auto; margin: 0 auto" /></div>
+      <div class="hero">
+        <h2><?php echo ucwords($title); ?></h2>
+        <p><?php echo $meta_description; ?></p>
+        <a class="btn" href="<?php echo $final; ?>">Daftar</a>
+        <a class="btn" href="<?php echo $final; ?>">Login</a>
+        <div class="cardwrap">
+          <div class="banner">
+  <amp-img src="<?php echo $banner; ?>" width="294" height="214" layout="responsive" alt="Students standing together outside a campus building"></amp-img>
+</div>
+        </div>
+      </div>
+      <div class="white">
+        <p class="intro"><?php echo $meta_description; ?></p>
+        <div class="cols">
+          <div class="col"><i></i><b>0% Intro APR</b>Enjoy 0% APR for 12 months on purchases and balance transfers.</div>
+          <div class="col"><i></i><b>No Annual Fee</b>Your card, your money. Zero annual fee, no surprises.</div>
+          <div class="col"><i></i><b>Cash back on essentials</b>Earn 4% cash back on groceries, gas and streaming.</div>
+        </div>
+      </div>
+      <div class="sp"></div>
+    </div>
+  </div>
+</body>
+</html>

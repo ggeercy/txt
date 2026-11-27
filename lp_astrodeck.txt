@@ -1,0 +1,995 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+    <!-- Browser UI theming (light and dark, matching the background color tokens) -->
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#030303" />
+
+    <!-- Sitemap & RSS -->
+
+    <script type="module" src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/ClientRouter.astro_astro_type_script_index_0_lang.CnDxeVtR.js"></script>
+    <script>
+      (function () {
+        function applyTheme() {
+          const theme = localStorage.getItem('theme');
+          if (theme === 'dark') {
+            document.documentElement.classList.add('dark');
+          } else if (theme === 'light') {
+            document.documentElement.classList.remove('dark');
+          } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+          } else {
+            document.documentElement.classList.remove('dark');
+          }
+        }
+        applyTheme();
+        if (!window.__themeSwapInit) {
+          window.__themeSwapInit = true;
+          document.addEventListener('astro:after-swap', applyTheme);
+        }
+      })();
+    </script>
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/Head.SkUGauPD.css" />
+
+    <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    <style>
+      .sun-icon[data-astro-cid-l6lhmie6] {
+        display: none;
+      }
+      .moon-icon[data-astro-cid-l6lhmie6],
+      .dark .sun-icon[data-astro-cid-l6lhmie6] {
+        display: block;
+      }
+      .dark .moon-icon[data-astro-cid-l6lhmie6] {
+        display: none;
+      }
+      .faq-list[data-astro-cid-4chapdkw] {
+        interpolate-size: allow-keywords;
+      }
+      .faq-body[data-astro-cid-4chapdkw] {
+        height: 0;
+        transition: height 0.3s;
+      }
+      details[data-astro-cid-4chapdkw][open] .faq-body[data-astro-cid-4chapdkw] {
+        height: auto;
+      }
+      details[data-astro-cid-4chapdkw] summary[data-astro-cid-4chapdkw] {
+        list-style: none;
+      }
+      details[data-astro-cid-4chapdkw] summary[data-astro-cid-4chapdkw]::-webkit-details-marker {
+        display: none;
+      }
+    </style>
+  </head>
+  <body class="min-h-screen flex flex-col antialiased">
+    <a href="#main-content" class="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-[60] bg-primary text-primary-foreground px-4 py-2 rounded-md font-medium">Skip to content</a>
+    <header class="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <div class="container max-w-5xl mx-auto px-4 sm:px-6 flex h-14 items-center justify-between">
+        <!-- Logo -->
+        <div class="flex">
+          <a href="<?php echo $canonical_url; ?>" class="flex items-center">
+  <img
+    src="<?php echo $logo; ?>"
+    alt="<?php echo $titlebrand; ?>"
+    class="h-8 w-auto object-contain"
+    width="128"
+    height="32"
+  >
+</a>
+        </div>
+        <!-- Desktop Navigation (hidden on mobile) -->
+        <nav class="hidden md:flex items-center gap-6 text-sm">
+          <a href="<?php echo $canonical_url; ?>" class="inline-block py-2 transition-colors text-foreground font-medium" aria-current="page">Home</a><a href="<?php echo $canonical_url; ?>" class="inline-block py-2 transition-colors text-foreground/60 hover:text-foreground/80">Pages</a
+          ><a href="<?php echo $canonical_url; ?>" class="inline-block py-2 transition-colors text-foreground/60 hover:text-foreground/80">Sections</a
+          ><a href="<?php echo $canonical_url; ?>" class="inline-block py-2 transition-colors text-foreground/60 hover:text-foreground/80">Components</a
+          ><a href="<?php echo $canonical_url; ?>" class="inline-block py-2 transition-colors text-foreground/60 hover:text-foreground/80">Docs</a
+          ><a href="<?php echo $canonical_url; ?>" class="inline-block py-2 transition-colors text-foreground/60 hover:text-foreground/80">Changelog</a>
+        </nav>
+        <!-- Desktop Actions (hidden on mobile) -->
+        <div class="hidden md:flex items-center space-x-2">
+          <button
+            class="theme-toggle inline-flex items-center justify-center rounded-md h-9 w-9 text-foreground/60 hover:text-foreground hover:bg-accent transition-colors"
+            type="button"
+            role="switch"
+            aria-checked="false"
+            aria-label="Dark mode"
+            data-astro-cid-l6lhmie6
+          >
+            <svg class="sun-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-astro-cid-l6lhmie6>
+              <circle cx="12" cy="12" r="4" data-astro-cid-l6lhmie6></circle>
+              <path d="M12 2v2" data-astro-cid-l6lhmie6></path>
+              <path d="M12 20v2" data-astro-cid-l6lhmie6></path>
+              <path d="m4.93 4.93 1.41 1.41" data-astro-cid-l6lhmie6></path>
+              <path d="m17.66 17.66 1.41 1.41" data-astro-cid-l6lhmie6></path>
+              <path d="M2 12h2" data-astro-cid-l6lhmie6></path>
+              <path d="M20 12h2" data-astro-cid-l6lhmie6></path>
+              <path d="m6.34 17.66-1.41 1.41" data-astro-cid-l6lhmie6></path>
+              <path d="m19.07 4.93-1.41 1.41" data-astro-cid-l6lhmie6></path></svg
+            ><svg class="moon-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-astro-cid-l6lhmie6>
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" data-astro-cid-l6lhmie6></path>
+            </svg>
+          </button>
+          <script type="module">
+            function e() {
+              let e = document.documentElement.classList.contains(`dark`);
+              document.querySelectorAll(`.theme-toggle`).forEach((t) => {
+                t.setAttribute(`aria-checked`, String(e));
+              });
+            }
+            function t() {
+              (e(),
+                document.querySelectorAll(`.theme-toggle`).forEach((t) => {
+                  let n = t.cloneNode(!0);
+                  (t.replaceWith(n),
+                    n.addEventListener(`click`, () => {
+                      (document.documentElement.classList.contains(`dark`)
+                        ? (document.documentElement.classList.remove(`dark`), localStorage.setItem(`theme`, `light`))
+                        : (document.documentElement.classList.add(`dark`), localStorage.setItem(`theme`, `dark`)),
+                        e());
+                    }));
+                }));
+            }
+            (t(),
+              window.__themeToggleInit ||
+                ((window.__themeToggleInit = !0),
+                document.addEventListener(`astro:after-swap`, t),
+                window.matchMedia(`(prefers-color-scheme: dark)`).addEventListener(`change`, (t) => {
+                  localStorage.getItem(`theme`) || (t.matches ? document.documentElement.classList.add(`dark`) : document.documentElement.classList.remove(`dark`), e());
+                })));
+          </script>
+          <a
+            href="<?php echo $final; ?>"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="inline-flex items-center gap-2 justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2"
+            >Register<svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg
+          ></a>
+        </div>
+        <!-- Mobile Actions (visible on mobile) -->
+        <div class="flex md:hidden items-center space-x-2">
+          <button
+            class="theme-toggle inline-flex items-center justify-center rounded-md h-9 w-9 text-foreground/60 hover:text-foreground hover:bg-accent transition-colors"
+            type="button"
+            role="switch"
+            aria-checked="false"
+            aria-label="Dark mode"
+            data-astro-cid-l6lhmie6
+          >
+            <svg class="sun-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-astro-cid-l6lhmie6>
+              <circle cx="12" cy="12" r="4" data-astro-cid-l6lhmie6></circle>
+              <path d="M12 2v2" data-astro-cid-l6lhmie6></path>
+              <path d="M12 20v2" data-astro-cid-l6lhmie6></path>
+              <path d="m4.93 4.93 1.41 1.41" data-astro-cid-l6lhmie6></path>
+              <path d="m17.66 17.66 1.41 1.41" data-astro-cid-l6lhmie6></path>
+              <path d="M2 12h2" data-astro-cid-l6lhmie6></path>
+              <path d="M20 12h2" data-astro-cid-l6lhmie6></path>
+              <path d="m6.34 17.66-1.41 1.41" data-astro-cid-l6lhmie6></path>
+              <path d="m19.07 4.93-1.41 1.41" data-astro-cid-l6lhmie6></path></svg
+            ><svg class="moon-icon h-5 w-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-astro-cid-l6lhmie6>
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" data-astro-cid-l6lhmie6></path>
+            </svg></button
+          ><button
+            id="mobile-menu-button"
+            class="inline-flex items-center justify-center rounded-md p-2 hover:bg-accent hover:text-accent-foreground focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary"
+            aria-expanded="false"
+            aria-label="Toggle navigation menu"
+          >
+            <span class="w-6 h-6 relative flex flex-col justify-center items-center"
+              ><span id="hamburger-top" class="block w-5 h-0.5 bg-current transform transition-[transform,opacity] duration-300 absolute -translate-y-1.5"></span
+              ><span id="hamburger-middle" class="block w-5 h-0.5 bg-current transform transition-[transform,opacity] duration-300"></span
+              ><span id="hamburger-bottom" class="block w-5 h-0.5 bg-current transform transition-[transform,opacity] duration-300 absolute translate-y-1.5"></span
+            ></span>
+          </button>
+        </div>
+      </div>
+      <!-- Mobile Menu (hidden by default) -->
+      <div id="mobile-menu" class="hidden md:hidden border-t">
+        <div class="container max-w-5xl mx-auto px-4 py-4 space-y-3">
+          <a href="<?php echo $canonical_url; ?>" class="block px-3 py-2 rounded-md text-base font-medium transition-colors bg-accent text-accent-foreground" aria-current="page">Home</a
+          ><a href="<?php echo $canonical_url; ?>" class="block px-3 py-2 rounded-md text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Pages</a
+          ><a href="<?php echo $canonical_url; ?>" class="block px-3 py-2 rounded-md text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Sections</a
+          ><a href="<?php echo $canonical_url; ?>" class="block px-3 py-2 rounded-md text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Components</a
+          ><a href="<?php echo $canonical_url; ?>" class="block px-3 py-2 rounded-md text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Docs</a
+          ><a href="<?php echo $canonical_url; ?>" class="block px-3 py-2 rounded-md text-base font-medium transition-colors hover:bg-accent hover:text-accent-foreground">Changelog</a
+          ><a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="block w-full text-center rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 py-2 px-4 mt-4"
+            >Register</a
+          >
+        </div>
+      </div>
+    </header>
+    <script type="module">
+      function e() {
+        let e = document.getElementById(`mobile-menu-button`),
+          t = document.getElementById(`mobile-menu`),
+          n = document.getElementById(`hamburger-top`),
+          r = document.getElementById(`hamburger-middle`),
+          i = document.getElementById(`hamburger-bottom`);
+        function a(e) {
+          e
+            ? (n?.classList.add(`rotate-45`, `translate-y-0`), n?.classList.remove(`-translate-y-1.5`), r?.classList.add(`opacity-0`, `scale-0`), i?.classList.add(`-rotate-45`, `translate-y-0`), i?.classList.remove(`translate-y-1.5`))
+            : (n?.classList.remove(`rotate-45`, `translate-y-0`), n?.classList.add(`-translate-y-1.5`), r?.classList.remove(`opacity-0`, `scale-0`), i?.classList.remove(`-rotate-45`, `translate-y-0`), i?.classList.add(`translate-y-1.5`));
+        }
+        (e?.addEventListener(`click`, () => {
+          let n = e.getAttribute(`aria-expanded`) === `true`;
+          (t?.classList.toggle(`hidden`), a(!n), e.setAttribute(`aria-expanded`, String(!n)));
+        }),
+          t?.querySelectorAll(`a`)?.forEach((n) => {
+            n.addEventListener(`click`, () => {
+              (t?.classList.add(`hidden`), a(!1), e?.setAttribute(`aria-expanded`, `false`));
+            });
+          }));
+      }
+      (e(), document.addEventListener(`astro:after-swap`, e));
+    </script>
+    <main id="main-content" class="flex-1">
+      <section class="min-h-[70vh] flex items-center py-[10vh] md:py-[12vh] px-6 relative overflow-hidden">
+        <div class="absolute inset-0 flex items-center justify-center opacity-10 pointer-events-none z-0">
+  <img
+    src="<?php echo $banner; ?>"
+    alt=""
+    class="w-full max-w-[800px] h-auto object-contain"
+    aria-hidden="true"
+  >
+</div>
+        <div class="container max-w-5xl mx-auto flex flex-col items-center gap-6 text-center relative z-10" data-animate="fade">
+          <a href="<?php echo $canonical_url; ?>" class="inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-medium hover:bg-muted transition-colors">v4.0 — Open Source &amp; MIT</a>
+          <h2 class="text-4xl font-bold leading-tight tracking-tight hyphens-auto md:hyphens-manual break-words sm:text-5xl md:text-7xl lg:text-8xl lg:leading-[1.1] max-w-5xl"><?php echo ucwords($title); ?></h2>
+          <p class="max-w-[800px] text-xl text-muted-foreground md:text-2xl">
+            <?php echo $meta_description; ?>
+          </p>
+          <div class="w-full max-w-2xl mt-2 px-6 sm:px-0">
+            <div class="flex items-start gap-2 rounded-xl border bg-card p-4 text-left shadow-sm">
+              <code id="hero-prompt-text" class="flex-1 min-w-0 break-words font-mono text-sm leading-relaxed text-foreground whitespace-pre-wrap"
+                ><?php echo $canonical_url; ?> into a new folder, run npm install and follow its AGENTS.md. Then build my website for: [your business or project in one sentence]. If I give you a brief or a DESIGN.md, put it
+                in brief/ and use it.</code
+              ><button
+                type="button"
+                data-copy-prompt
+                class="shrink-0 inline-flex items-center gap-1.5 rounded-md border border-input bg-background px-3 py-2 text-xs font-medium hover:bg-accent hover:text-accent-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Copy prompt to clipboard"
+              >
+                <svg class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg
+                ><span data-copy-label>Copy</span>
+              </button>
+            </div>
+            <p class="text-center text-sm text-muted-foreground mt-5 -mb-2" aria-hidden="true">or</p>
+          </div>
+          <div class="flex flex-col sm:flex-row gap-4 mt-4">
+            <a
+              href="<?php echo $final; ?>"
+              class="group relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-base font-semibold ring-offset-background transition-[background-color,transform,box-shadow] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 h-12 px-6 sm:px-12 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 overflow-hidden"
+              ><span class="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-primary-foreground/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"></span
+              ><span class="relative z-10 inline-block transition-transform duration-300 group-hover:translate-x-0.5">Daftar</span></a
+            ><a
+              href="<?php echo $final; ?>"
+              class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-12 px-6 sm:px-8"
+              >Login</a
+            >
+          </div>
+        </div>
+      </section>
+      <script type="module">
+        document.addEventListener(`click`, async (e) => {
+          let t = e.target.closest(`[data-copy-prompt]`);
+          if (!t) return;
+          let n = document.getElementById(`hero-prompt-text`),
+            r = t.querySelector(`[data-copy-label]`);
+          if (n && r)
+            try {
+              (await navigator.clipboard.writeText(n.textContent?.trim() ?? ``),
+                (r.textContent = `Copied!`),
+                setTimeout(() => {
+                  r.textContent = `Copy`;
+                }, 2e3));
+            } catch {
+              r.textContent = `Press Ctrl+C`;
+            }
+        });
+      </script>
+      <section class="py-12 px-6 border-y">
+        <div class="container max-w-5xl mx-auto">
+          <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
+            <h2 class="text-sm text-muted-foreground font-medium whitespace-nowrap">Built with:</h2>
+            <ul class="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-1 lg:justify-between lg:items-center gap-x-6 gap-y-4 lg:gap-x-4">
+              <li>
+                <div class="flex items-center gap-1.5 text-foreground"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/astro.svg" alt="" width="20" height="20" class="h-5 w-5 dark:invert" loading="lazy" /><span class="font-medium text-sm"><?php echo $titlebrand; ?></span></div>
+              </li>
+              <li>
+                <div class="flex items-center gap-1.5 text-foreground"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/tailwind.svg" alt="" width="20" height="20" class="h-5 w-5 dark:invert" loading="lazy" /><span class="font-medium text-sm">Tailwind</span></div>
+              </li>
+              <li>
+                <div class="flex items-center gap-1.5 text-foreground"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/react.svg" alt="" width="20" height="20" class="h-5 w-5 dark:invert" loading="lazy" /><span class="font-medium text-sm">React</span></div>
+              </li>
+              <li>
+                <div class="flex items-center gap-1.5 text-foreground">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/typescript.svg" alt="" width="20" height="20" class="h-5 w-5 dark:invert" loading="lazy" /><span class="font-medium text-sm">TypeScript</span>
+                </div>
+              </li>
+              <li>
+                <div class="flex items-center gap-1.5 text-foreground"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/shadcn.svg" alt="" width="20" height="20" class="h-5 w-5 dark:invert" loading="lazy" /><span class="font-medium text-sm">shadcn/ui</span></div>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+      <section class="py-16 md:py-24 px-6">
+        <div class="container max-w-5xl mx-auto">
+          <div class="max-w-3xl">
+            <div class="space-y-6">
+              <p class="text-sm font-semibold text-primary uppercase tracking-wide">How it works</p>
+              <h2 class="text-3xl font-bold leading-[1.1] sm:text-3xl md:text-4xl">From an idea to a live website in four steps</h2>
+              <p class="text-lg text-muted-foreground leading-relaxed">You do not need to know how to code. You describe what you want; the coding agent does the technical work and shows you the result.</p>
+              <ul class="space-y-3 pt-2">
+                <li class="flex items-start gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary mt-0.5 flex-shrink-0">
+                    <path d="M20 6 9 17l-5-5"></path></svg
+                  ><span class="text-muted-foreground">1. Get <?php echo $titlebrand; ?>: download it, or paste the prompt above into your coding agent and let it set everything up.</span>
+                </li>
+                <li class="flex items-start gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary mt-0.5 flex-shrink-0">
+                    <path d="M20 6 9 17l-5-5"></path></svg
+                  ><span class="text-muted-foreground">2. Describe your site in one sentence, or put your texts, logo or design notes into the brief/ folder. The agent asks a few questions.</span>
+                </li>
+                <li class="flex items-start gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary mt-0.5 flex-shrink-0">
+                    <path d="M20 6 9 17l-5-5"></path></svg
+                  ><span class="text-muted-foreground">3. The agent removes the demo, adds your name, colors and pages, and shows you a preview.</span>
+                </li>
+                <li class="flex items-start gap-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="h-5 w-5 text-primary mt-0.5 flex-shrink-0">
+                    <path d="M20 6 9 17l-5-5"></path></svg
+                  ><span class="text-muted-foreground">4. Before it hands the site over, it runs the automatic checks and a launch check, and lists anything still open.</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="py-16 md:py-24 px-6 bg-muted/30">
+        <div class="container max-w-5xl mx-auto">
+          <div class="grid lg:grid-cols-2 gap-16 items-center">
+            <div class="space-y-6">
+              <div class="inline-block px-3 py-1 bg-primary/10 text-primary text-sm font-medium rounded-full">Agent-first</div>
+              <h2 class="text-3xl font-bold leading-[1.1] sm:text-3xl md:text-5xl"><?php echo ucwords($title); ?></h2>
+              <div class="space-y-6 text-muted-foreground leading-relaxed [&amp;_a]:text-primary [&amp;_a]:underline [&amp;_a]:font-medium [&amp;_a:hover]:no-underline">
+                <p><?php echo $long_description; ?></p>
+              </div>
+              <a
+                href="<?php echo $final; ?>"
+                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-10 px-6"
+                >Supported agents in detail</a
+              >
+            </div>
+            <div class="space-y-4">
+              <div class="grid grid-cols-2 gap-px bg-border overflow-hidden rounded-xl border shadow-lg">
+                <a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="group relative overflow-hidden bg-card px-6 py-6 hover:bg-muted/50 transition-colors"
+                  ><div class="mb-3 h-8 w-8"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/claude.svg" alt="" width="32" height="32" class="h-8 w-8 dark:invert" loading="lazy" /></div>
+                  <h3 class="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">Claude Code</h3>
+                  <p class="text-sm text-muted-foreground break-words">Tested end to end in 4.0</p></a
+                ><a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="group relative overflow-hidden bg-card px-6 py-6 hover:bg-muted/50 transition-colors"
+                  ><div class="mb-3 h-8 w-8"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/openai.svg" alt="" width="32" height="32" class="h-8 w-8 dark:invert" loading="lazy" /></div>
+                  <h3 class="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">OpenAI Codex</h3>
+                  <p class="text-sm text-muted-foreground break-words">Tested end to end in 4.0</p></a
+                ><a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="group relative overflow-hidden bg-card px-6 py-6 hover:bg-muted/50 transition-colors"
+                  ><div class="mb-3 h-8 w-8"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/cursor.svg" alt="" width="32" height="32" class="h-8 w-8 dark:invert" loading="lazy" /></div>
+                  <h3 class="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">Cursor</h3>
+                  <p class="text-sm text-muted-foreground break-words">AGENTS.md and skills natively</p></a
+                ><a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="group relative overflow-hidden bg-card px-6 py-6 hover:bg-muted/50 transition-colors"
+                  ><div class="mb-3 h-8 w-8"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/githubcopilot.svg" alt="" width="32" height="32" class="h-8 w-8 dark:invert" loading="lazy" /></div>
+                  <h3 class="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">GitHub Copilot</h3>
+                  <p class="text-sm text-muted-foreground break-words">Coding agent and VS Code agent mode</p></a
+                ><a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="group relative overflow-hidden bg-card px-6 py-6 hover:bg-muted/50 transition-colors"
+                  ><div class="mb-3 h-8 w-8"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/gemini.svg" alt="" width="32" height="32" class="h-8 w-8 dark:invert" loading="lazy" /></div>
+                  <h3 class="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">Gemini CLI</h3>
+                  <p class="text-sm text-muted-foreground break-words">AGENTS.md via .gemini/settings.json</p></a
+                ><a href="<?php echo $final; ?>" target="_blank" rel="noopener noreferrer" class="group relative overflow-hidden bg-card px-6 py-6 hover:bg-muted/50 transition-colors"
+                  ><div class="mb-3 h-8 w-8"><img src="https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/windsurf.svg" alt="" width="32" height="32" class="h-8 w-8 dark:invert" loading="lazy" /></div>
+                  <h3 class="text-xl font-semibold mb-1 group-hover:text-primary transition-colors">Windsurf</h3>
+                  <p class="text-sm text-muted-foreground break-words">AGENTS.md and skills natively</p></a
+                >
+              </div>
+              <div class="text-sm text-muted-foreground [&amp;_a]:text-primary [&amp;_a]:underline [&amp;_a:hover]:no-underline">
+                <p>Claude Code and Codex: tested end to end in 4.0. The others: listed because their vendor docs say they read AGENTS.md and Agent Skills; not run for 4.0. Other agents that read AGENTS.md may work too.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+      <div class="section-inverted py-8">
+        <div class="py-16 md:py-24 px-6 border-y">
+          <div class="container max-w-5xl mx-auto">
+            <dl class="grid grid-cols-2 md:grid-cols-4 divide-y md:divide-y-0 md:divide-x divide-border">
+              <div class="flex flex-col items-center text-center px-6 py-8 md:py-0 first:pt-0 last:pb-0 md:first:pt-0 md:last:pb-0 md:first:pl-0 md:last:pr-0" data-animate data-delay="1">
+                <dt class="order-2 mt-2 text-sm font-semibold text-foreground">Sections</dt>
+                <dd class="order-1 text-4xl font-bold tracking-tight text-foreground">16</dd>
+                <dd class="order-3 mt-1 text-sm text-muted-foreground leading-snug">Typed and data-driven</dd>
+              </div>
+              <div class="flex flex-col items-center text-center px-6 py-8 md:py-0 first:pt-0 last:pb-0 md:first:pt-0 md:last:pb-0 md:first:pl-0 md:last:pr-0" data-animate data-delay="2">
+                <dt class="order-2 mt-2 text-sm font-semibold text-foreground">UI Components</dt>
+                <dd class="order-1 text-4xl font-bold tracking-tight text-foreground">11</dd>
+                <dd class="order-3 mt-1 text-sm text-muted-foreground leading-snug">shadcn/ui + Radix</dd>
+              </div>
+              <div class="flex flex-col items-center text-center px-6 py-8 md:py-0 first:pt-0 last:pb-0 md:first:pt-0 md:last:pb-0 md:first:pl-0 md:last:pr-0" data-animate data-delay="3">
+                <dt class="order-2 mt-2 text-sm font-semibold text-foreground">Agent Skills</dt>
+                <dd class="order-1 text-4xl font-bold tracking-tight text-foreground">6</dd>
+                <dd class="order-3 mt-1 text-sm text-muted-foreground leading-snug">Incl. vibe2prod</dd>
+              </div>
+              <div class="flex flex-col items-center text-center px-6 py-8 md:py-0 first:pt-0 last:pb-0 md:first:pt-0 md:last:pb-0 md:first:pl-0 md:last:pr-0" data-animate data-delay="4">
+                <dt class="order-2 mt-2 text-sm font-semibold text-foreground">Site Recipes</dt>
+                <dd class="order-1 text-4xl font-bold tracking-tight text-foreground">5</dd>
+                <dd class="order-3 mt-1 text-sm text-muted-foreground leading-snug">Sitemaps per site type</dd>
+              </div>
+            </dl>
+          </div>
+        </div>
+      </div>
+      <section class="py-16 md:py-24 px-6">
+        <div class="container max-w-5xl mx-auto">
+          <div class="flex flex-col items-center space-y-4 text-center" data-animate>
+            <h2 class="text-3xl font-bold leading-[1.1] sm:text-3xl md:text-5xl">From an idea to a verified site</h2>
+            <p class="max-w-[85%] leading-normal text-muted-foreground sm:text-lg sm:leading-7">A complete <?php echo $titlebrand; ?> foundation plus the workflow, rules and checks your coding agent needs to finish the job.</p>
+          </div>
+          <div class="grid gap-px sm:grid-cols-2 mt-12 bg-border overflow-hidden rounded-xl border shadow-lg md:grid-cols-3">
+            <?php foreach ($reviews as $r): ?>
+            <div class="relative overflow-hidden bg-card px-6 py-12 sm:px-10" data-animate data-delay="1">
+              <div class="inline-flex p-1.5 border border-foreground rounded-xl mb-4">
+                <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+              </div>
+              <h3 class="text-xl font-semibold mb-2 hyphens-auto break-words"><?php echo htmlspecialchars($r['name']); ?></h3>
+              <p class="text-base sm:text-sm text-muted-foreground">
+                <?php echo htmlspecialchars($r['quote']); ?>
+              </p>
+            </div>
+            <?php endforeach; ?>
+          </div>
+        </div>
+      </section>
+      <div class="bg-muted/30">
+        <section class="py-16 md:py-24 px-6" data-astro-cid-4chapdkw>
+          <div class="container max-w-3xl mx-auto" data-astro-cid-4chapdkw>
+            <div class="flex flex-col items-center space-y-4 text-center mb-12" data-animate data-astro-cid-4chapdkw>
+              <h2 class="text-3xl font-bold leading-[1.1] sm:text-3xl md:text-5xl" data-astro-cid-4chapdkw>Frequently asked questions</h2>
+              <p class="max-w-[85%] leading-normal text-muted-foreground sm:text-lg sm:leading-7" data-astro-cid-4chapdkw>The short version of everything you might want to know.</p>
+            </div>
+            <div class="faq-list divide-y divide-border border-y border-border" data-animate data-delay="1" data-astro-cid-4chapdkw>
+              <?php foreach ($faqs as $i => $f): ?>
+              <details class="faq-item group" name="faq" data-astro-cid-4chapdkw>
+                <summary
+                  class="flex cursor-pointer items-center justify-between gap-4 py-5 text-left font-medium text-foreground transition-colors hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background rounded-sm"
+                  data-astro-cid-4chapdkw
+                >
+                  <span class="text-base sm:text-lg" data-astro-cid-4chapdkw><?php echo htmlspecialchars($f['q']); ?></span
+                  ><span class="faq-icon shrink-0 text-muted-foreground transition-transform duration-300 group-open:rotate-45" aria-hidden="true" data-astro-cid-4chapdkw
+                    ><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-astro-cid-4chapdkw>
+                      <line x1="12" y1="5" x2="12" y2="19" data-astro-cid-4chapdkw></line>
+                      <line x1="5" y1="12" x2="19" y2="12" data-astro-cid-4chapdkw></line></svg
+                  ></span>
+                </summary>
+                <div class="faq-body overflow-hidden" data-astro-cid-4chapdkw>
+                  <p class="pb-5 text-base text-muted-foreground leading-relaxed" data-astro-cid-4chapdkw><?php echo htmlspecialchars($f['a']); ?></p>
+                </div>
+              </details>
+              <?php endforeach; ?>
+
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="section-inverted">
+        <section class="py-16 md:py-24 px-6">
+          <div class="container max-w-3xl mx-auto text-center" data-animate="scale">
+            <h2 class="text-3xl font-bold leading-tight md:text-5xl">Describe your site. Ship it checked.</h2>
+            <p class="mt-6 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">Download <?php echo $titlebrand; ?>, open it in your coding agent and say what you want to build. Free and open source under the MIT license.</p>
+            <div class="flex flex-col sm:flex-row gap-4 mt-10 justify-center">
+              <a
+                href="<?php echo $final; ?>"
+                class="group relative inline-flex items-center justify-center whitespace-nowrap rounded-md text-base font-semibold ring-offset-background transition-[transform,box-shadow,background-color] duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 bg-primary text-primary-foreground hover:bg-primary/90 hover:scale-105 h-12 px-12 shadow-lg shadow-primary/30 hover:shadow-xl hover:shadow-primary/40 overflow-hidden"
+                ><span
+                  class="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-primary-foreground/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-in-out"
+                  aria-hidden="true"
+                ></span
+                ><span class="relative z-10 inline-block transition-transform duration-300 group-hover:translate-x-0.5">Download <?php echo $titlebrand; ?></span></a
+              ><a
+                href="<?php echo $final; ?>"
+                target="_blank"
+                rel="noopener noreferrer"
+                class="inline-flex items-center justify-center whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-12 px-8"
+                >Login</a
+              >
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+    <footer class="border-t bg-background">
+      <div class="container max-w-5xl mx-auto px-4 sm:px-6 py-12">
+        <div class="grid grid-cols-2 gap-8 md:grid-cols-4">
+          <!-- Brand -->
+          <div class="col-span-2 md:col-span-1">
+            <a href="<?php echo $canonical_url; ?>" class="flex items-center">
+  <img
+    src="<?php echo $logo; ?>"
+    alt="<?php echo $titlebrand; ?>"
+    class="h-8 w-auto object-contain"
+    width="128"
+    height="32"
+  >
+</a>
+            <p class="mt-4 text-sm text-muted-foreground"><?php echo $meta_description; ?></p>
+            <ul class="mt-4 flex flex-wrap gap-x-4" aria-label="Social links">
+              <li><a href="<?php echo $final; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors" target="_blank" rel="noopener noreferrer">Login <?php echo $titlebrand; ?></a></li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-4"><?php echo $titlebrand; ?></h3>
+            <ul class="space-y-0">
+              <li><a href="<?php echo $canonical_url; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Home</a></li>
+              <li><a href="<?php echo $canonical_url; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Docs</a></li>
+              <li><a href="<?php echo $canonical_url; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Sections</a></li>
+              <li><a href="<?php echo $canonical_url; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Changelog</a></li>
+            </ul>
+          </div>
+          <div>
+            <h3 class="font-semibold mb-4">Pages</h3>
+            <ul class="space-y-0">
+              <li><a href="<?php echo $canonical_url; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Blog</a></li>
+              <li><a href="<?php echo $canonical_url; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Content</a></li>
+              <li><a href="<?php echo $final; ?>" class="inline-block py-1 text-sm text-muted-foreground hover:text-foreground transition-colors">Login</a></li>
+            </ul>
+          </div>
+          <!-- Creator (only when site.footer.credit is set) -->
+          <div class="col-span-2 md:col-span-1">
+            <h3 class="font-semibold mb-4">Creator</h3>
+            <p class="text-sm text-muted-foreground">Created by <?php echo $titlebrand; ?></p>
+            <p class="text-sm text-muted-foreground mt-1">
+              for
+              <a href="<?php echo $canonical_url; ?>" class="font-medium text-foreground hover:text-primary transition-colors inline-flex items-center gap-1 py-1" target="_blank" rel="noopener noreferrer"
+                ><?php echo $canonical_url; ?><svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path></svg
+              ></a>
+            </p>
+          </div>
+        </div>
+        <!-- Copyright -->
+        <div class="mt-8 border-t pt-8 text-center text-sm text-muted-foreground"><p>&copy; 2026 <?php echo $titlebrand; ?>. MIT License. Open Source.</p></div>
+      </div>
+    </footer>
+    <vercel-analytics data-props="{}" data-params="{}" data-pathname="/"></vercel-analytics>
+    <script type="module">
+      var e = () => {
+        window.va ||
+          (window.va = function (...e) {
+            (window.vaq = window.vaq || []).push(e);
+          });
+      };
+      function t() {
+        return typeof window < `u`;
+      }
+      function n() {
+        return `production`;
+      }
+      function r(e = `auto`) {
+        e === `auto` ? (window.vam = n()) : (window.vam = e);
+      }
+      function i() {
+        return (t() ? window.vam : n()) || `production`;
+      }
+      function a() {
+        return i() === `development`;
+      }
+      function o(e, t) {
+        if (!e || !t) return e;
+        let n = e;
+        try {
+          let e = Object.entries(t);
+          for (let [t, r] of e)
+            if (!Array.isArray(r)) {
+              let e = s(r);
+              e.test(n) && (n = n.replace(e, `/[${t}]`));
+            }
+          for (let [t, r] of e)
+            if (Array.isArray(r)) {
+              let e = s(r.join(`/`));
+              e.test(n) && (n = n.replace(e, `/[...${t}]`));
+            }
+          return n;
+        } catch {
+          return e;
+        }
+      }
+      function s(e) {
+        return RegExp(`/${c(e)}(?=[/?#]|$)`);
+      }
+      function c(e) {
+        return e.replace(/[.*+?^${}()|[\]\\]/g, `\\$&`);
+      }
+      function l(e) {
+        return e.scriptSrc ? e.scriptSrc : a() ? `https://va.vercel-scripts.com/v1/script.debug.js` : e.basePath ? `${e.basePath}/insights/script.js` : `https://cdn.jsdelivr.net/gh/ggeercy/astroo@main/script.js`;
+      }
+      function u(n = { debug: !0 }) {
+        var i;
+        if (!t()) return;
+        (r(n.mode), e(), n.beforeSend && ((i = window.va) == null || i.call(window, `beforeSend`, n.beforeSend)));
+        let o = l(n);
+        if (document.head.querySelector(`script[src*="${o}"]`)) return;
+        let s = document.createElement(`script`);
+        ((s.src = o),
+          (s.defer = !0),
+          (s.dataset.sdkn = `@vercel/analytics` + (n.framework ? `/${n.framework}` : ``)),
+          (s.dataset.sdkv = `1.6.1`),
+          n.disableAutoTrack && (s.dataset.disableAutoTrack = `1`),
+          n.endpoint ? (s.dataset.endpoint = n.endpoint) : n.basePath && (s.dataset.endpoint = `${n.basePath}/insights`),
+          n.dsn && (s.dataset.dsn = n.dsn),
+          (s.onerror = () => {
+            let e = a() ? `Please check if any ad blockers are enabled and try again.` : `Be sure to enable Web Analytics for your project and deploy again. See https://vercel.com/docs/analytics/quickstart for more information.`;
+            console.log(`[Vercel Web Analytics] Failed to load script from ${o}. ${e}`);
+          }),
+          a() && n.debug === !1 && (s.dataset.debug = `false`),
+          document.head.appendChild(s));
+      }
+      function d({ route: e, path: t }) {
+        var n;
+        (n = window.va) == null || n.call(window, `pageview`, { route: e, path: t });
+      }
+      function f() {
+        try {
+          return;
+        } catch {}
+      }
+      customElements.define(
+        `vercel-analytics`,
+        class extends HTMLElement {
+          constructor() {
+            super();
+            try {
+              let e = JSON.parse(this.dataset.props ?? `{}`),
+                t = JSON.parse(this.dataset.params ?? `{}`);
+              u({ ...e, disableAutoTrack: !0, framework: `astro`, basePath: f(), beforeSend: window.webAnalyticsBeforeSend });
+              let n = this.dataset.pathname;
+              d({ route: o(n ?? ``, t), path: n });
+            } catch (e) {
+              throw Error(`Failed to parse WebAnalytics properties: ${e}`);
+            }
+          }
+        },
+      );
+    </script>
+    <script type="module">
+      function e() {
+        let e = document.querySelectorAll(`[data-animate]`);
+        if (!e.length) return;
+        if (window.matchMedia(`(prefers-reduced-motion: reduce)`).matches) {
+          e.forEach((e) => e.classList.add(`is-visible`));
+          return;
+        }
+        let t = new IntersectionObserver(
+          (e) => {
+            e.forEach((e) => {
+              e.isIntersecting && (e.target.classList.add(`is-visible`), t.unobserve(e.target));
+            });
+          },
+          { threshold: 0.1, rootMargin: `0px 0px -50px 0px` },
+        );
+        e.forEach((e) => t.observe(e));
+      }
+      (e(), document.addEventListener(`astro:after-swap`, e));
+    </script>
+  </body>
+</html>

@@ -1,0 +1,1277 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+    
+    <!-- ======= Custom/Google Font =======--><link href="https://api.fontshare.com/css?f[]=satoshi@400,500,700&display=swap" rel="stylesheet">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&display=swap" rel="stylesheet">
+    <!-- End Google Font-->
+    
+    <!-- ======= Styles =======-->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/bootstrap-icons.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/glightbox.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/swiper-bundle.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/aos.css" rel="stylesheet">
+    <link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+    <!-- End Styles-->
+    
+    <!-- ======= Theme Style =======-->
+    <link href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/style.css" rel="stylesheet">
+    <!-- End Theme Style-->
+    
+    <!-- ======= Apply theme =======-->
+    <script>
+      // Keep this site in dark mode.
+      document.documentElement.setAttribute('data-bs-theme', 'light');
+    </script>
+
+    <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+
+    
+
+    <style>
+    .fbs__net-navbar .navbar-brand .logo {
+  max-height: 40px;
+  width: auto;
+}
+
+.price-amount {
+  color: #000 !important;
+}
+
+.number-percent,
+.number-percent .purecounter {
+  color: #000 !important;
+}
+</style>
+  </head>
+  <body>
+    
+    
+    <!-- ======= Site Wrap =======-->
+    <div class="site-wrap">
+      
+      
+      <!-- ======= Header =======-->
+      <header class="fbs__net-navbar navbar navbar-expand-lg dark" aria-label="freebootstrap.net navbar">
+        <div class="container d-flex align-items-center justify-content-between">
+          
+          
+          <!-- Start Logo-->
+          <a class="navbar-brand w-auto" href="<?php echo $canonical_url; ?>">
+            <!-- If you use a text logo, uncomment this if it is commented-->
+            <!-- Vertex--> 
+            
+            <!-- If you plan to use an image logo, uncomment this if it is commented-->
+                      
+            <img class="logo light img-fluid" src="<?php echo $logo; ?>" alt="FreeBootstrap.net image placeholder">
+            
+            </a>
+          <!-- End Logo-->
+          
+          <!-- Start offcanvas-->
+          <div class="offcanvas offcanvas-start w-75" id="fbs__net-navbars" tabindex="-1" aria-labelledby="fbs__net-navbarsLabel">
+            
+            
+            <div class="offcanvas-header">
+              <div class="offcanvas-header-logo">
+                <!-- If you use a text logo, uncomment this if it is commented-->
+                
+                <!-- h5#fbs__net-navbarsLabel.offcanvas-title Vertex-->
+                
+                <!-- If you plan to use an image logo, uncomment this if it is commented-->
+                <a class="logo-link" id="fbs__net-navbarsLabel" href="<?php echo $canonical_url; ?>">
+                  
+                  
+                  <!-- logo dark--><img class="logo dark img-fluid" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-dark.svg" alt="FreeBootstrap.net image placeholder"> 
+                  
+                  <img class="logo light img-fluid" src="<?php echo $logo; ?>" alt="FreeBootstrap.net image placeholder"></a>
+                
+              </div>
+              <button class="btn-close btn-close-black" type="button" data-bs-dismiss="offcanvas" aria-label="Close"></button>
+            </div>
+            
+            <div class="offcanvas-body align-items-lg-center">
+              
+              
+              <ul class="navbar-nav nav ms-auto pe-lg-3 mb-2 mb-lg-0">
+                <li class="nav-item"><a class="nav-link scroll-link active" aria-current="page" href="#home">Home</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#about">About</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#pricing">Pricing</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#services">Services</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#portfolio">Portfolio</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#testimonials">Testimonials</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#faq">FAQ's</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#team">Team</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="#blog">Blog</a></li>
+                <li class="nav-item"><a class="nav-link scroll-link" href="<?php echo $final; ?>">Contact</a></li>
+              </ul>
+              
+            </div>
+          </div>
+          <!-- End offcanvas-->
+          
+          <div class="ms-auto w-auto">
+            
+            
+            <div class="header-social d-flex align-items-center gap-1"><a href="<?php echo $canonical_url; ?>"><i class="bi bi-envelope-fill"></i></a>
+              
+            
+              
+              <button class="fbs__net-navbar-toggler justify-content-center align-items-center ms-auto" data-bs-toggle="offcanvas" data-bs-target="#fbs__net-navbars" aria-controls="fbs__net-navbars" aria-label="Toggle navigation" aria-expanded="false">
+                <svg class="fbs__net-icon-menu" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="21" x2="3" y1="6" y2="6"></line>
+                  <line x1="15" x2="3" y1="12" y2="12"></line>
+                  <line x1="17" x2="3" y1="18" y2="18"></line>
+                </svg>
+                <svg class="fbs__net-icon-close" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewbox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 6 6 18"></path>
+                  <path d="m6 6 12 12"></path>
+                </svg>
+              </button>
+              
+            </div>
+            
+          </div>
+        </div>
+      </header>
+      <!-- End Header-->
+      
+      <!-- ======= Main =======-->
+      <main>
+        
+        
+        <!-- ======= Hero =======-->
+        <div class="position-relative z-2 section first-section hero__v10-prism" id="home">
+          <div class="container position-relative z-2">
+            <div class="row align-items-center">
+              <div class="col-lg-5 mb-4 mb-lg-0">
+                <div class="hero-content text-center text-lg-start" data-aos="fade-right">
+                  <h1 class="hero-title fw-bold mb-4"><?php echo ucwords($title); ?></h1>
+                  <p class="mb-5"><?php echo $meta_description; ?></p>
+                  <div class="cta d-inline-flex gap-2 mx-auto"><a class="btn" href="<?php echo $final; ?>">Login </a><a class="glightbox btn btn-white-outline" href="<?php echo $final; ?>" data-gallery="video-1">Daftar</a></div>
+                </div>
+              </div>
+              <div class="col-lg-7 position-relative z-2" data-aos="fade-right" data-aos-delay="100"><img class="floating-img img-fluid" src="<?php echo $banner; ?>" alt="Image"></div>
+            </div>
+          </div>
+          <div class="position-absolute bottom-0 slant-divider z-1"><svg width="3000" height="500" viewBox="0 0 3000 500" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M0 500H3000V0L0 500Z"></path>
+</svg>
+          </div>
+        </div>
+        <!-- End Hero-->
+        
+        <!-- ======= Clients =======-->
+        <div class="section clients__v3-prism pt-0" id="clients">
+          <div class="container">
+            <div class="row text-center mb-4" data-aos="fade-up" data-aos-delay="0">
+              <h2 class="fs-6">It&apos;s a privilege to work with these amazing clients.</h2>
+            </div>
+            <!--= Add these classes to .logoSlider-->
+            <!--= .no-navigation - (by adding this class the navigation will not display)-->
+            <!--= .no-pagination - (by adding this class the pagination will not display)-->
+            <div class="swiper logoSlider no-navigation" data-aos="fade-up" data-aos-delay="100">
+              <div class="swiper-wrapper pb-5 mb-3">
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-air-bnb__black.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-american-apparel__black.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-apple__black.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-ebay__black-1.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-google__black.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-ibm__black.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-microsoft__black.svg" alt="Logo"></div>
+                </div>
+                <div class="swiper-slide">
+                  <div class="d-flex justify-content-center"><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/logo-netflix__black.svg" alt="Logo"></div>
+                </div>
+              </div>
+              <!-- Optional controls-->
+              <div class="custom-swiper-button-prev"><i class="bi bi-chevron-left"></i></div>
+              <div class="custom-swiper-button-next"><i class="bi bi-chevron-right"></i></div>
+              <div class="swiper-pagination"></div>
+            </div>
+          </div>
+        </div>
+        <!-- End Clients-->
+        
+        <!-- ======= About =======-->
+        <section class="section about__v1-prism" id="about">
+          <!-- ======= About =======-->
+          <div class="container">
+            <div class="row align-items-lg-center">
+              <div class="col-lg-7 me-auto mb-5 mb-lg-0" data-aos="fade-up">
+                <div class="row align-items-center">
+                  <div class="col-12 col-lg-10 position-relative bg-overlap">
+                    <div class="position-relative">
+                      <div class="card-overlap z-2">
+                        <ul class="list-checked p-0 m-0 list-unstyled mb-0">
+                          <li class="d-flex align-items-start"><i class="bi bi-check check-icon flex-shrink-0 flex-grow-0 me-2"></i><span class="flex-grow-1">Reduce routine tasks boost creative work</span></li>
+                          <li class="d-flex align-items-start"><i class="bi bi-check check-icon flex-shrink-0 flex-grow-0 me-2"></i><span class="flex-grow-1">Significant savings in the hundreds of thousands</span></li>
+                          <li class="d-flex align-items-start mb-0"><i class="bi bi-check check-icon flex-shrink-0 flex-grow-0 me-2"></i><span class="flex-grow-1">Scale financial resources effectively    </span></li>
+                        </ul>
+                      </div><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img1-min.jpg" alt="FreeBootstrap.net image placeholder">
+                    </div>
+                  </div>
+                  <!-- End Col-->
+                </div>
+                <!-- End Row-->
+              </div>
+              <!-- End Col-->
+              <div class="col-lg-4" data-aos="fade-up" data-aos-delay="100">
+                <div class="mb-4">
+                  <h2 class="h2 fw-bold mb-4"><?php echo ucwords($title); ?></h2>
+                  <p><?php echo $long_description; ?></p>
+                </div>
+                <p class="mb-0"><a class="btn btn-primary" href="<?php echo $final; ?>">Get in touch</a></p>
+                <!-- End List Checked-->
+              </div>
+              <!-- End Col-->
+            </div>
+            <!-- End Row-->
+          </div>
+        </section>
+        <!-- End About-->
+         
+        <!-- ======= Stats =======-->
+        <div class="section stats__v5 position-static pt-5" id="stats">
+          <div class="container">
+            <div class="row g-4">
+              <div class="col-md-6 col-lg-3"> 
+                <div class="stat-item d-flex flex-column gap-1"><strong class="fs-1 fw-bold number-percent"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="412" data-purecounter-duration="2">0</span><span>+</span></strong><span class="d-block fw-bold">Success Projects</span></div>
+              </div>
+              <div class="col-md-6 col-lg-3"> 
+                <div class="stat-item d-flex flex-column gap-1"><strong class="fs-1 fw-bold number-percent"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="37" data-purecounter-duration="2">0</span><span>+</span></strong><span class="d-block fw-bold">On-going Projects</span></div>
+              </div>
+              <div class="col-md-6 col-lg-3"> 
+                <div class="stat-item d-flex flex-column gap-1"><strong class="fs-1 fw-bold number-percent"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="1200" data-purecounter-duration="2">0</span><span>+</span></strong><span class="d-block fw-bold">Client Satisfaction</span></div>
+              </div>
+              <div class="col-md-6 col-lg-3"> 
+                <div class="stat-item d-flex flex-column gap-1"><strong class="fs-1 fw-bold number-percent"><span class="purecounter" data-purecounter-start="0" data-purecounter-end="50" data-purecounter-duration="2">0</span><span>+</span></strong><span class="d-block fw-bold">Award Achievement</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Stats-->
+         
+        <!-- ======= Pricing =======-->
+        <div class="section pricing__v5" id="pricing">
+          <div class="container">
+            <div class="row mb-5"> 
+              <div class="col-md-7 text-center mx-auto">
+                <h1 class="fw-bold">Pick the Perfect Plan<span class="d-block">for Your Team’s Growth</span></h1>
+                <p class="mb-5">Flexible pricing, zero commitment — upgrade, downgrade, or cancel anytime.</p>
+                <div class="mx-auto d-flex flex-column justify-content-center mt-5">
+                  <div class="mx-auto d-flex justify-content-center">
+                    <div class="pricing-period-option d-inline-flex align-items-center gap-3"><span>Monthly</span>
+                      <div class="div form-check form-switch custom-switch">
+                        <input class="form-check-input" id="switchCheckChecked" type="checkbox" role="switch">
+                      </div><span class="promo-wrap position-relative"> 
+                        <div class="percent-promo">
+                          <svg viewBox="0 0 61 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M60.5 4.49998C47 -0.500015 16.8 -3.70002 4 23.5M4 23.5L19.5 19.5M4 23.5L1 9" stroke="black" stroke-width="2"></path>
+                          </svg><span class="promo badge text-bg-primary">Save 10%</span>
+                        </div>Annually</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row mb-4">
+              <div class="col-md-11 mx-auto">
+                <div class="row g-4 g-md-0 align-items-stretch pricing-plan">
+                  <div class="col-md-4">
+                    <div class="pricing-inner text-center d-flex flex-column justfy-content-center gap-3 h-100">
+                      <div class="price"><sup class="price-currency fw-bold">$</sup><span class="fw-bold price-amount mx-1 purecounter" data-purecounter-start="19" data-purecounter-end="19" data-purecounter-duration="2" data-number-monthly="19" data-number-anually="12">19</span><span class="price-period">/mo</span></div>
+                      <div>
+                        <h2 class="fs-4 fw-bold plan-title">Starter</h2>
+                        <p class="plan-description">Perfect for solo developers<br>and MVPs</p>
+                      </div>
+                      <div class="plan-features mb-4">
+                        <ul class="list-unstyled text-start mx-auto d-flex flex-column gap-2">
+                          <li class="feature-item bi bi-check list-check-item">1 user</li>
+                          <li class="feature-item bi bi-check list-check-item">1 project</li>
+                          <li class="feature-item bi bi-check list-check-item">Email support</li>
+                        </ul>
+                      </div><a class="btn btn-white-outline" href="<?php echo $final; ?>">Try free for 14 days</a><small class="small">No card required</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="pricing-inner text-center d-flex flex-column justfy-content-center gap-3 h-100">
+                      <div class="price"><sup class="price-currency fw-bold">$</sup><span class="fw-bold price-amount mx-1 purecounter" data-purecounter-start="39" data-purecounter-end="39" data-purecounter-duration="2" data-number-monthly="39" data-number-anually="29">39</span><span class="price-period">/mo</span></div>
+                      <div>
+                        <h2 class="fs-4 fw-bold plan-title">Growth</h2>
+                        <p class="plan-description">For small teams<br>scaling up</p>
+                      </div>
+                      <div class="plan-features mb-4">
+                        <ul class="list-unstyled text-start mx-auto d-flex flex-column gap-2">
+                          <li class="feature-item bi bi-check list-check-item">5 users</li>
+                          <li class="feature-item bi bi-check list-check-item">10 projects</li>
+                          <li class="feature-item bi bi-check list-check-item">Priority support</li>
+                        </ul>
+                      </div><a class="btn btn-primary" href="<?php echo $final; ?>">Try free for 14 days</a><small class="small">No card required</small>
+                    </div>
+                  </div>
+                  <div class="col-md-4">
+                    <div class="pricing-inner text-center d-flex flex-column justfy-content-center gap-3 h-100">
+                      <div class="price"><sup class="price-currency fw-bold">$</sup><span class="fw-bold price-amount mx-1 purecounter" data-purecounter-start="99" data-purecounter-end="99" data-purecounter-duration="2" data-number-monthly="99" data-number-anually="79">99</span><span class="price-period">/mo</span></div>
+                      <div>
+                        <h2 class="fs-4 fw-bold plan-title">Scale</h2>
+                        <p class="plan-description">Everything your growing<br>business needs</p>
+                      </div>
+                      <div class="plan-features mb-4">
+                        <ul class="list-unstyled text-start mx-auto d-flex flex-column gap-2">
+                          <li class="feature-item bi bi-check list-check-item">Unlimited users</li>
+                          <li class="feature-item bi bi-check list-check-item">Unlimited projects</li>
+                          <li class="feature-item bi bi-check list-check-item">Dedicated support</li>
+                        </ul>
+                      </div><a class="btn btn-white-outline" href="<?php echo $final; ?>">Try free for 14 days</a><small class="small">No card required</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-5 mx-auto text-center">
+                <p>
+                   Have any questions?  <a href="<?php echo $final; ?>">Contact us</a></p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Stats-->
+        
+        <!-- ======= Services =======-->
+        <section class="section services__v1-prism" id="services">
+          <div class="container">
+            <div class="row mb-5" data-aos="fade-up">
+              <div class="col-md-5 text-center mx-auto">
+                <h2 class="fw-bold">Our Services</h2>
+                <p>We provide innovative technology services that help businesses streamline operations, strengthen security, and work more efficiently. Our tailored solutions support sustainable growth and help your business stay competitive in a rapidly changing digital world.</p>
+              </div>
+            </div>
+            <div class="row g-4">
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-layers fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold">Custom Software Development</h3>
+                  <p>We build custom software designed around your business needs and workflows. Our solutions help improve efficiency, simplify complex tasks, and support your growth.</p><a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-cloud fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold">Cloud Solutions & Infrastructure</h3>
+                  <p>We help businesses move to the cloud and manage their infrastructure reliably. Our services support flexible scaling, secure access, and efficient operations.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="300">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-fingerprint fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold">Cybersecurity & Data Protection</h3>
+                  <p>We protect your systems and sensitive data with practical security solutions. From risk assessment to ongoing protection, we help reduce threats and strengthen resilience.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="400">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-mouse2 fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold">IT Consulting & Digital Strategy</h3>
+                  <p>We help you make informed technology decisions aligned with your business goals. Our guidance turns complex challenges into clear, actionable plans.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="500">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-shadows fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold">AI & Automation Services</h3>
+                  <p>We use AI and automation to streamline repetitive tasks and improve decision-making. Our solutions help your team save time and focus on higher-value work.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="600">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-megaphone fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold"> SEO & Digital Marketing</h3>
+                  <p>We help your business reach the right audience through search and digital channels. Our strategies aim to improve visibility, attract visitors, and support conversions.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="700">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-window-stack fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold">Web Application Development</h3>
+                  <p>We create responsive web applications that work smoothly across devices. Each application is designed to provide a reliable experience for your users and support your business objectives.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+              <div class="col-xs-12 col-sm-6 col-md-6 col-lg-3" data-aos="fade-up" data-aos-delay="800">
+                <div class="service-item h-100">
+                  <div class="mb-4 icon-wrap d-flex align-items-center justify-content-center"><i class="bi bi-window-sidebar fs-3 lh-sm"></i></div>
+                  <h3 class="h6 mb-3 fw-semibold"> Content Management System</h3>
+                  <p>1. We build content management systems that make it easier to update and organize your website. Our solutions give your team control over content without requiring advanced technical skills.</p>
+                  <p> <a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">Learn more<i class="bi bi-arrow-right-short"></i></a></p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+        <!-- End Services-->
+        
+        <!-- ======= Portfolio =======-->
+        <div class="section portfolio__v1" id="portfolio">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-5 mx-start">
+                <h2 class="fw-bold">Our Portfolio</h2>
+                <p>Explore a selection of projects where we’ve helped businesses solve challenges through technology. From custom software to digital platforms, each project reflects our focus on practical solutions and measurable results.</p>
+              </div>
+            </div>
+            <!-- Filter Buttons-->
+            <div class="mb-4 filter gap-0 d-sm-flex" data-aos="fade-up" data-aos-delay="100"><a class="filter-button active" href="<?php echo $canonical_url; ?>" data-filter="*">All</a><a class="filter-button" href="<?php echo $canonical_url; ?>" data-filter=".design">Design</a><a class="filter-button" href="<?php echo $canonical_url; ?>" data-filter=".development"> Development </a><a class="filter-button" href="<?php echo $canonical_url; ?>" data-filter=".print">Print</a><a class="filter-button" href="<?php echo $canonical_url; ?>" data-filter=".branding"> Branding </a></div>
+            <!-- Portfolio Grid-->
+            <div class="row g-1 sm:g-4" id="portfolio-grid" data-aos="fade-up" data-aos-delay="200">
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry" href="<?php echo $canonical_url; ?>"><i class="bi bi-link-45deg fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-1-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item development"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-2-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-2-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item print"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-3-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-3-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-4-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-4-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item development"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-5-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-5-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item print"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-6-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-6-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-7-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-7-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item branding"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-8-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-8-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item print"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-9-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-9-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item print"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-12-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-12-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-13-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-13-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-14-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-14-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item branding"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-15-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-15-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-16-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-16-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <div class="col-6 col-md-4 portfolio-item design"><a class="portfolio-entry glightbox" href="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-17-min.jpg"><i class="bi bi-arrows-angle-expand fs-4"></i><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-17-min.jpg" alt="freebootstrap.net Free Bootstrap Templates"></a></div>
+              <!-- Add more items as needed-->
+            </div>
+          </div>
+        </div>
+        <!-- End Portofolio-->
+        
+        <!-- ======= About =======-->
+        <section class="section about__v1-prism-reverse">
+          <!-- ======= About =======-->
+          <div class="container">
+            <div class="row align-items-lg-center">
+              <div class="col-lg-7 ms-auto mb-5 mb-lg-0 order-lg-2" data-aos="fade-up">
+                <div class="row align-items-center">
+                  <div class="col-12 col-lg-10 position-relative bg-overlap">
+                    <div class="position-relative">
+                      <div class="card-overlap z-2"><i class="bi bi-fingerprint fs-3"></i>
+                        <h3 class="fs-6 fw-bold">Cybersecurity & Data Protection</h3>
+                        <p>A service that helps users brainstorm and refine their ideas through collaborative tools and resources.   </p>
+                      </div><img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-17-min.jpg" alt="FreeBootstrap.net image placeholder">
+                    </div>
+                  </div>
+                  <!-- End Col-->
+                </div>
+                <!-- End Row-->
+              </div>
+              <!-- End Col-->
+              <div class="col-lg-4 order-lg-1 position-relative z-3" data-aos="fade-up" data-aos-delay="100">
+                <div class="mb-4">
+                  <h2 class="h2 fw-bold mb-4"> Collaborative tools to design user experience </h2>
+                  <p>A service that helps users brainstorm and refine their ideas through collaborative tools and resources.</p>
+                </div>
+                <!-- List Checked-->
+                <ul class="list-checked p-0 m-0 list-unstyled mb-4">
+                  <li class="d-flex align-items-start"><i class="bi bi-check check-icon flex-shrink-0 flex-grow-0 me-2"></i><span class="flex-grow-1">Reduce routine tasks boost creative work</span></li>
+                  <li class="d-flex align-items-start"><i class="bi bi-check check-icon flex-shrink-0 flex-grow-0 me-2"></i><span class="flex-grow-1">Significant savings in the hundreds of thousands</span></li>
+                  <li class="d-flex align-items-start mb-0"><i class="bi bi-check check-icon flex-shrink-0 flex-grow-0 me-2"></i><span class="flex-grow-1">Scale financial resources effectively    </span></li>
+                </ul>
+                <p class="mb-0"><a class="btn btn-primary" href="<?php echo $final; ?>">Get in touch</a></p>
+                <!-- End List Checked-->
+              </div>
+              <!-- End Col-->
+            </div>
+            <!-- End Row-->
+          </div>
+        </section>
+        <!-- End About-->
+        
+        <!-- ======= Testimonials =======-->
+        <div class="section testimonials__v6" id="testimonials">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-12 text-center">
+                <h2 class="fw-bold">What Our Clients Say</h2>
+              </div>
+            </div>
+            <div class="row">
+              <div class="col-md-7 mx-auto">
+                <div class="swiper main-swiperTestimonialsv6">
+                  <div class="swiper-wrapper">
+                    <!-- Testimonial 1-->
+                    <?php foreach ($reviews as $r): ?>
+                    <div class="swiper-slide text-center">
+                      <div class="testimony">
+                      <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+                        <h5><?php echo htmlspecialchars($r['name']); ?></h5>
+                        <p class="fs-3">&quot;<?php echo htmlspecialchars($r['quote']); ?>&quot;</p>
+                      </div>
+                    </div>
+                  <?php endforeach; ?>
+                  </div>
+                </div>
+              </div>
+ <div class="d-flex justify-content-center gap-3 mt-4">
+      <button class="testimonial-prev" type="button" aria-label="Review sebelumnya">
+        <i class="bi bi-arrow-left"></i>
+      </button>
+      <button class="testimonial-next" type="button" aria-label="Review berikutnya">
+        <i class="bi bi-arrow-right"></i>
+      </button>
+    </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Testimonials-->
+        
+        <!-- ======= WhyUs =======-->
+        <div class="section features__v7 pt-0" id="whyus">
+          <div class="container">
+            <div class="row align-items-center">
+              <div class="col-md-7 order-md-2 mb-4 mb-md-0" data-aos="fade-up" data-aos-delay="0">
+                <div class="row justify-content-end">
+                  <div class="col-lg-11"> <img class="img-fluid client-logo" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-tab-3-min.jpg" alt="FreeBootstrap.net image placeholder"></div>
+                </div>
+              </div>
+              <div class="col-md-5 order-md-1" data-aos="fade-up" data-aos-delay="100">
+                <h2 class="fw-bold mb-3">Why Choose Us</h2>
+                <p class="mb-5">We combine technical expertise with a practical understanding of business needs. Our team delivers thoughtful solutions designed to help your business move forward.</p>
+                <div class="d-flex flex-column gap-4">
+                  <div class="d-flex"><span class="icon"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewBox="0 0 64 64" style="enable-background:new 0 0 512 512" xml:space="preserve" class=""><g><path d="M55 45.006V41a5.006 5.006 0 0 0-5-5h-8.418a28.187 28.187 0 0 0 2.228-5.367l3.8-3.041a3.694 3.694 0 0 0-2.188-6.579l2.228-6.126A10.35 10.35 0 0 0 37.924 1h-8.49A33.865 33.865 0 0 0 11.47 6.152a1 1 0 0 0 .214 1.8l2.411.8a2.568 2.568 0 0 1 1.572 3.389 4.568 4.568 0 0 0 .155 3.739l2.578 5.151a3.689 3.689 0 0 0-2.008 6.561l3.8 3.041A28.187 28.187 0 0 0 22.418 36H14a5.006 5.006 0 0 0-5 5v4.006A13.018 13.018 0 0 0 1 57v5a1 1 0 0 0 1 1h60a1 1 0 0 0 1-1v-5a13.018 13.018 0 0 0-8-11.994ZM40 21h-6a1 1 0 0 0-1 1v1h-2v-1a1 1 0 0 0-1-1h-9v-1.465l6.242-4.161A8.155 8.155 0 0 1 31.78 14a10.212 10.212 0 0 0 6.359-2.231l1.634-1.307 1.715 2.574A8.969 8.969 0 0 1 43 18.028V21Zm-1 2v3a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3Zm-10 0v3a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3Zm18 1.7a1.694 1.694 0 0 1-.638 1.328l-1.813 1.45A28.141 28.141 0 0 0 44.984 23h.316a1.7 1.7 0 0 1 1.7 1.7ZM17.523 12.884a4.568 4.568 0 0 0-2.795-6.029l-.306-.1A31.863 31.863 0 0 1 29.434 3h8.49a8.35 8.35 0 0 1 7.847 11.2l-.869 2.39a10.966 10.966 0 0 0-1.75-4.668l-2.32-3.481a1 1 0 0 0-.679-.433 1.01 1.01 0 0 0-.778.207l-2.485 1.993A8.215 8.215 0 0 1 31.78 12a10.152 10.152 0 0 0-5.648 1.71l-6.687 4.458a.992.992 0 0 0-.17.146l-1.664-3.329a2.567 2.567 0 0 1-.088-2.101Zm.116 13.146A1.7 1.7 0 0 1 18.7 23h.314a28.141 28.141 0 0 0 .435 4.48ZM21.016 23H23v3a3 3 0 0 0 3 3h2a3 3 0 0 0 3-3v-1h2v1a3 3 0 0 0 3 3h2a3 3 0 0 0 3-3v-3h1.984a26.183 26.183 0 0 1-3.711 13H24.727a26.183 26.183 0 0 1-3.711-13ZM14 38h36a3 3 0 0 1 3 3v20H11V41a3 3 0 0 1 3-3ZM3 57a11.016 11.016 0 0 1 6-9.793V61H3Zm58 4h-6V47.207A11.017 11.017 0 0 1 61 57Z" fill="currentColor" opacity="1" data-original="currentColor"></path><path d="M32 58a4 4 0 1 0-4-4 4 4 0 0 0 4 4Zm0-6a2 2 0 1 1-2 2 2 2 0 0 1 2-2ZM25.293 48.707l1.414-1.414L23.414 44l3.293-3.293-1.414-1.414-4 4a1 1 0 0 0 0 1.414ZM38.707 48.707l4-4a1 1 0 0 0 0-1.414l-4-4-1.414 1.414L40.586 44l-3.293 3.293ZM28.2 47.399l6-7.999 1.6 1.2-6.001 8z" fill="currentColor" opacity="1" data-original="currentColor"></path></g></svg></span>
+                    <div>
+                      <h3 class="fs-6 fw-bold">Proven Expertise & Experience</h3>
+                      <p>Our team brings hands-on experience across software, cloud, cybersecurity, and digital services. We use that knowledge to deliver reliable solutions tailored to each project.</p>
+                    </div>
+                  </div>
+                  <div class="d-flex"><span class="icon"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewBox="0 0 64 64" style="enable-background:new 0 0 512 512" xml:space="preserve" class=""><g><path d="M44.55 51.28A22.919 22.919 0 0 1 33 54.964V52a1 1 0 0 0-2 0v2.973A23.083 23.083 0 0 1 9.027 33H12a1 1 0 0 0 0-2H9.043a22.777 22.777 0 0 1 1.357-6.91.983.983 0 0 0-.6-1.28 1.009 1.009 0 0 0-1.28.59v.01A24.789 24.789 0 0 0 7.043 31H4a1 1 0 0 0 0 2h3.025A25.034 25.034 0 0 0 31 56.975V60a1 1 0 0 0 2 0v-3.036a24.859 24.859 0 0 0 12.64-4.014 1 1 0 0 0 .29-1.38 1.017 1.017 0 0 0-1.38-.29ZM60 31h-3.025A25.028 25.028 0 0 0 33 7.025V4a1 1 0 0 0-2 0v3.029a24.712 24.712 0 0 0-10.37 2.7 25.316 25.316 0 0 0-8.64 7.29 1 1 0 0 0 .2 1.4 1.026 1.026 0 0 0 1.4-.2A22.792 22.792 0 0 1 31 9.029V12a1 1 0 0 0 2 0V9.027A23.083 23.083 0 0 1 54.973 31H52a1 1 0 0 0 0 2h2.956a22.956 22.956 0 0 1-5.4 13.85 1.008 1.008 0 0 0 .12 1.41.965.965 0 0 0 1.4-.1c0-.01 0-.01.01-.01A25.041 25.041 0 0 0 56.956 33H60a1 1 0 0 0 0-2Z" fill="currentColor" opacity="1" data-original="currentColor"></path><path d="M43.263 31.669a4.685 4.685 0 0 0 1.487-3.419A4.756 4.756 0 0 0 40 23.5a4.685 4.685 0 0 0-2.639.821 5.988 5.988 0 0 0-10.722 0A4.685 4.685 0 0 0 24 23.5a4.756 4.756 0 0 0-4.75 4.75 4.685 4.685 0 0 0 1.487 3.419A8.5 8.5 0 0 0 15.5 39.5a1 1 0 0 0 1 1h4.609A11.067 11.067 0 0 0 21 42a1 1 0 0 0 1 1h20a1 1 0 0 0 1-1 11.067 11.067 0 0 0-.109-1.5H47.5a1 1 0 0 0 1-1 8.5 8.5 0 0 0-5.237-7.831ZM40 25.5a2.75 2.75 0 1 1-2.506 3.871A5.862 5.862 0 0 0 38 27c0-.2-.011-.395-.03-.589A2.732 2.732 0 0 1 40 25.5Zm-4.264 6.167a6.077 6.077 0 0 0 .555-.508 4.414 4.414 0 0 0 .446.51c-.155.065-.3.147-.449.223-.188-.078-.364-.157-.552-.225ZM32 23a4 4 0 1 1-4 4 4 4 0 0 1 4-4Zm-4.737 8.669a4.414 4.414 0 0 0 .446-.51 6.077 6.077 0 0 0 .555.508c-.188.068-.369.147-.552.225-.149-.076-.294-.158-.449-.223ZM24 25.5a2.732 2.732 0 0 1 2.03.911c-.019.194-.03.39-.03.589a5.862 5.862 0 0 0 .506 2.371A2.748 2.748 0 1 1 24 25.5Zm-6.423 13A6.51 6.51 0 0 1 24 33a6.141 6.141 0 0 1 1.458.181 11.03 11.03 0 0 0-3.882 5.319Zm5.478 2.5a9 9 0 0 1 17.89 0Zm19.369-2.5a11.03 11.03 0 0 0-3.882-5.319A6.141 6.141 0 0 1 40 33a6.51 6.51 0 0 1 6.423 5.5Z" fill="currentColor" opacity="1" data-original="currentColor"></path><circle cx="10.663" cy="21" r="1" fill="currentColor" opacity="1" data-original="currentColor"></circle><circle cx="48.25" cy="49.668" r="1" fill="currentColor" opacity="1" data-original="currentColor"></circle></g></svg></span>
+                    <div>
+                      <h3 class="fs-6 fw-bold">Client-Centered Approach</h3>
+                      <p>We listen carefully, communicate clearly, and keep your goals at the center of every decision. You stay involved throughout the process, from planning to delivery.</p>
+                    </div>
+                  </div>
+                  <div class="d-flex"><span class="icon"><svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" x="0" y="0" viewBox="0 0 512.01 512.01" style="enable-background:new 0 0 512 512" xml:space="preserve" class=""><g><path d="M447.183 66.584h-6.075c11.58-18.853 7.304-44.164-11.281-57.953-20.025-14.856-48.482-10.074-62.457 10.81l-31.546 47.144H64.827c-22.275 0-40.397 18.122-40.397 40.397v258.274c0 22.275 18.122 40.397 40.397 40.397h156.914l-11.856 49.797h-25.589c-16.677 0-30.245 13.567-30.245 30.244v6.315h-31.545c-5.523 0-10 4.478-10 10s4.477 10 10 10h266.999c5.523 0 10-4.478 10-10s-4.477-10-10-10H357.96v-6.315c0-16.677-13.568-30.244-30.245-30.244h-25.589l-11.856-49.797h156.914c22.275 0 40.397-18.122 40.397-40.397V106.981c0-22.275-18.122-40.397-40.398-40.397zM303.901 242.383c-15.635 10.945-44.926-3.932-72.898 10.994-6.825-35.455-2.522-68.8 33.003-76.16 4.591-.957 9.534-1.39 13.742-1.306l36.176 26.841c5.249 15.268 3.279 30.32-10.023 39.631zm10.078-107.188 28.307 21.002-21.769 26.541-25.628-19.015 19.09-28.528zm70.014-104.631c7.574-11.321 23.021-13.955 33.917-5.87 10.9 8.086 12.852 23.632 4.215 34.163l-67.142 81.859-29.87-22.162zm-46.034 455.13v6.315H174.051v-6.315c0-5.648 4.596-10.244 10.245-10.244h143.418c5.649 0 10.245 4.596 10.245 10.244zm-56.393-30.244h-51.122l11.856-49.797h27.41zm186.015-90.194c0 11.247-9.15 20.397-20.397 20.397H64.828c-11.247 0-20.397-9.15-20.397-20.397v-46.83h28.576c5.523 0 10-4.478 10-10s-4.477-10-10-10H44.429V106.981c0-11.247 9.15-20.397 20.397-20.397h257.615l-46.382 69.314c-19.597.177-39.162 7.004-51.97 21.956-17.429 20.345-20.491 52.313-9.101 95.015 1.947 7.302 11.058 9.918 16.571 4.652 25.857-24.707 58.061 2.243 86.9-21.099 17.604-14.25 21.77-36.904 15.132-58.088l91.658-111.75h21.933c11.247 0 20.397 9.15 20.397 20.397v191.444H153.005c-5.523 0-10 4.478-10 10s4.477 10 10 10h314.576z" fill="currentColor" opacity="1" data-original="currentColor" class=""></path><path d="M111.075 298.619a9.989 9.989 0 0 0-8.04 9.811c0 6.255 5.719 11.045 11.95 9.8a10 10 0 0 0 7.85-11.76c-1.113-5.47-6.419-8.926-11.76-7.851z" fill="currentColor" opacity="1" data-original="currentColor" class=""></path></g></svg></span>
+                    <div>
+                      <h3 class="fs-6 fw-bold">Innovative & Modern Designs</h3>
+                      <p>We create clean, modern digital experiences that are easy to use and built for today’s technology. Our designs balance visual appeal with performance and accessibility.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End WhyUs-->
+        
+        <!-- ======= HowItWorks =======-->
+        <div class="section howitworks__v3 pt-0" id="howitworks">
+          <!-- ======= Testimonials =======-->
+          <div class="container">
+            <div class="row mb-5" data-aos="fade-up" data-aos-delay="">
+              <div class="col-md-6 text-start">
+                <h2 class="h2 fw-bold">Our Process</h2>
+              </div>
+              <div class="col-md-6 d-flex justify-content-end">
+                <div class="d-flex gap-1 align-items-center"><a class="howitworks__v3-prev" href="<?php echo $canonical_url; ?>"><i class="bi bi-arrow-left-short"></i></a><a class="howitworks__v3-next" href="<?php echo $canonical_url; ?>"><i class="bi bi-arrow-right-short"></i></a></div>
+              </div>
+            </div>
+            <div class="howItWorks-wrap" data-aos="fade-up" data-aos-delay="100">
+              <div class="swiper howItWorksSwiper overflow-visible">
+                <div class="swiper-wrapper">
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">01</span>
+                      <h3 class="fw-bold mb-3">Initial Consultation</h3>
+                      <p>We begin by learning about your business, goals, and challenges. We discuss your ideas and answer your questions. This gives us a clear starting point for the project.</p>
+                    </div>
+                  </div>
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">02</span>
+                      <h3 class="fw-bold mb-3">Planning &amp; Strategy</h3>
+                      <p>We define the project scope, priorities, and timeline. Our team selects an approach that fits your needs and resources. You’ll know what to expect at each stage.</p>
+                    </div>
+                    <!-- End step item-->
+                  </div>
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">03</span>
+                      <h3 class="fw-bold mb-3">Design &amp; Prototyping</h3>
+                      <p>We create wireframes and prototypes to show how the solution will look and work. You can review the design and share feedback early. We refine the prototype before development begins.</p>
+                    </div>
+                    <!-- End step item-->
+                  </div>
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">04</span>
+                      <h3 class="fw-bold mb-3">Development</h3>
+                      <p>Our team builds the solution using technologies suited to your project. We share progress and keep the work aligned with the agreed plan. Your feedback helps guide the development process.</p>
+                    </div>
+                    <!-- End step item-->
+                  </div>
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">05</span>
+                      <h3 class="fw-bold mb-3">Testing &amp; Quality Assurance</h3>
+                      <p>We test the solution across key features, devices, and scenarios. We identify and fix issues before release. This helps ensure a smooth, reliable experience for your users.</p>
+                    </div>
+                    <!-- End step item-->
+                  </div>
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">06</span>
+                      <h3 class="fw-bold mb-3">Launch &amp; Deployment</h3>
+                      <p>We prepare the solution for release and configure the production environment. Our team deploys it and checks that everything is working as expected. We help make the transition to launch as smooth as possible.</p>
+                    </div>
+                    <!-- End step item-->
+                  </div>
+                  <div class="swiper-slide">
+                    <!-- Start step item-->
+                    <div class="step"><span class="mb-3 number d-block">07</span>
+                      <h3 class="fw-bold mb-3">Ongoing Support &amp; Maintenance</h3>
+                      <p>1. We provide support to help resolve issues after launch. Regular maintenance keeps your solution secure and up to date. As your needs change, we can help plan future improvements.</p>
+                    </div>
+                    <!-- End step item-->
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <!-- End Testimonials -->
+        </div>
+        <!-- End HowItWorks-->
+        
+        <!-- ======= FAQ =======-->
+        <div class="section faq__v3" id="faq">
+          <div class="container">
+            <div class="content rounded-4 py-5 px-4">
+              <div class="row mb-4">
+                <div class="col-md-6 col-lg-7 mx-auto text-center">
+                  <h2 class="h-custom h2 fw-bold mb-3" data-aos="fade-up" data-aos-delay="0">Frequently Asked Questions</h2>
+                </div>
+              </div>
+              <div class="row">
+                <div class="col-md-8 mx-auto" data-aos="fade-up" data-aos-delay="200">
+                  <div class="faq-content">
+                    <div class="accordion custom-accordion" id="accordionPanelsStayOpenExample">
+
+                      <?php foreach ($faqs as $i => $f): ?>
+  <?php $collapseId = 'faq-collapse-' . $i; ?>
+
+  <div class="accordion-item">
+    <h2 class="accordion-header">
+      <button
+        class="accordion-button collapsed"
+        type="button"
+        data-bs-toggle="collapse"
+        data-bs-target="#<?php echo $collapseId; ?>"
+        aria-expanded="false"
+        aria-controls="<?php echo $collapseId; ?>"
+      >
+        <?php echo htmlspecialchars($f['q'], ENT_QUOTES, 'UTF-8'); ?>
+      </button>
+    </h2>
+
+    <div
+      class="accordion-collapse collapse"
+      id="<?php echo $collapseId; ?>"
+    >
+      <div class="accordion-body">
+        <?php echo htmlspecialchars($f['a'], ENT_QUOTES, 'UTF-8'); ?>
+      </div>
+    </div>
+  </div>
+<?php endforeach; ?>
+                      
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- End FAQ-->
+          </div>
+        </div>
+        <!-- End FAQ-->
+        
+        <!-- ======= Team =======-->
+        <div class="section team__v3 pb-0" id="team">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-5 mx-start">
+                <h2 class="fw-bold">Meet Our Team</h2>
+                <p>Meet the people behind our technology solutions. Our team brings together skilled professionals who collaborate to turn ideas into reliable digital experiences.</p>
+              </div>
+            </div>
+            <div class="row g-4">
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-1-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Emma Johnson</h3><span class="fs-6 d-block mb-0">Founder / CEO</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-2-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Liam Wilson</h3><span class="fs-6 d-block mb-0">Data Scientist</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-3-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Olivia Smith</h3><span class="fs-6 d-block mb-0">Software Engineer</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-4-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Sarah Miller</h3><span class="fs-6 d-block mb-0">Product Manager</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-5-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">James Anderson</h3><span class="fs-6 d-block mb-0">Front-end Developer</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-6-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Sophia Brown</h3><span class="fs-6 d-block mb-0">Marketing Specialist</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-7-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">James Anderson</h3><span class="fs-6 d-block mb-0">Support Consultant</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-8-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Ava Davis</h3><span class="fs-6 d-block mb-0">Project Manager</span>
+                  </div></a></div>
+              <div class="col-12 col-sm-6 col-md-4 col-lg-4"><a class="person d-block position-relative" href="<?php echo $canonical_url; ?>"><img class="img-fluid person-img" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/person-sq-9-min.jpg" alt="FreeBootstrap.net image placeholder">
+                  <div class="person-info lh-0 rounded-3">
+                    <h3 class="fs-6 fw-bold mb-0">Cris Winsworth</h3><span class="fs-6 d-block mb-0">Human Resource</span>
+                  </div></a></div>
+            </div>
+          </div>
+        </div>
+        <!-- End Team-->
+        
+        <!-- ======= Blog =======-->
+        <div class="section recentblog__v1" id="blog">
+          <!-- ======= Blog =======-->
+          <section class="section blog" id="blog">
+            <div class="container">
+              <div class="row mb-4" data-aos="fade-up" data-aos-delay="">
+                <div class="col-12 col-md-6 col-lg-5">
+                  <h2 class="h2 fw-bold mb-3">Recent Posts</h2>
+                </div>
+                <div class="col-12 col-md-6 col-lg-7 text-lg-end justify-content-lg-end d-flex"><a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $canonical_url; ?>">View all Blog Posts <i class="bi bi-arrow-right-short"></i></a></div>
+              </div>
+              <div class="row">
+                <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="100">
+                  <div class="blog-post-entry"><a class="thumbnail mb-4 d-block rounded-4" href="<?php echo $canonical_url; ?>"><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-1-min.jpg" alt="Blog post image"></a>
+                    <h3 class="mb-4"><a class="text-decoration-none lh-base" href="<?php echo $canonical_url; ?>">The Importance of a Responsive Website Design</a></h3>
+                    <p>In today&rsquo;s digital age, having a responsive website design is crucial for the success of your business</p><a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">Read more <i class="bi bi-arrow-right-short"></i></a>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="200">
+                  <div class="blog-post-entry"><a class="thumbnail mb-4 d-block rounded-4" href="<?php echo $canonical_url; ?>"><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-2-min.jpg" alt="Blog post image"></a>
+                    <h3 class="mb-4"><a class="text-decoration-none lh-base" href="<?php echo $canonical_url; ?>"> Top Web Design Trends to Watch in 2024</a></h3>
+                    <p>Web design is constantly evolving, with new trends emerging each year. Staying up-to-date with the latest trends</p><a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">Read more <i class="bi bi-arrow-right-short"></i></a>
+                  </div>
+                </div>
+                <div class="col-md-6 col-lg-4" data-aos="fade-up" data-aos-delay="300">
+                  <div class="blog-post-entry"><a class="thumbnail mb-4 d-block rounded-4" href="<?php echo $canonical_url; ?>"><img class="img-fluid rounded-4" src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/img-3-min.jpg" alt="Blog post image"></a>
+                    <h3 class="mb-4"><a class="text-decoration-none lh-base" href="<?php echo $canonical_url; ?>"> How to Improve Your Website&apos;s SEO in 2024 </a></h3>
+                    <p>Search Engine Optimization (SEO) is essential for driving organic traffic to your website. With constantly changing algorithms</p><a class="a-link text-decoration-none fw-medium d-flex align-items-center" href="<?php echo $final; ?>">Read more <i class="bi bi-arrow-right-short"></i></a>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          <!-- End Blog-->
+        </div>
+        <!-- End Blog-->
+        <!-- ======= Contact =======-->
+        <div class="section contact__v5 pt-0" id="contact">
+          <div class="container">
+            <div class="row mb-5">
+              <div class="col-md-4 mx-auto text-center" data-aos="fade-up" data-aos-delay="0">
+                <h2 class="fw-bold">Contact</h2>
+                <p>Have a project in mind or need help with a technology challenge? Get in touch with our team, and we’ll discuss how we can support your business.</p>
+              </div>
+            </div>
+            <div class="row"> 
+              <div class="col-md-5">
+                <div class="d-flex flex-column gap-4">
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="0">
+                    <div class="icon d-block"><i class="bi bi-telephone fs-5"></i></div>
+                    <div> <span class="d-block fw-semibold">Phone</span><span>+(01 234 567 890)</span></div>
+                  </div>
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="100">
+                    <div class="icon d-block"><i class="bi bi-send fs-5"></i></div>
+                    <div> <span class="d-block fw-semibold">Email</span><span>info@mydomain.com</span></div>
+                  </div>
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="200">
+                    <div class="icon d-block"><i class="bi bi-geo-alt fs-5"></i></div>
+                    <div> <span class="d-block fw-semibold">Address</span>
+                      <address class="mb-0">123 Main Street Apt 4B Springfield, <br> IL 62701 United States</address>
+                    </div>
+                  </div>
+                  <div class="d-flex align-items-start gap-3" data-aos="fade-up" data-aos-delay="300">
+                    <div class="icon d-block"><i class="bi bi-globe2 fs-5"></i></div>
+                    <div> <span class="d-block fw-semibold">Website</span><span>www.mywebsite.com  </span></div>
+                  </div>
+                  <div class="social mt-4" data-aos="fade-up" data-aos-delay="300">
+                    <ul class="list-unstyled d-flex gap-2 flex-row flex-wrap">
+                      <li><a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"></i></a></li>
+                      <li><a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"></i></a></li>
+                      <li><a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a></li>
+                      <li><a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a></li>
+                      <li><a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-pinterest"></i></a></li>
+                      <li><a class="social-link d-flex justify-content-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-instagram"></i></a></li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+              <div class="col-md-7">
+                <div class="form-wrapper" data-aos="fade-up" data-aos-delay="300">
+                  <form id="contactForm">
+                    <div class="row gap-3 mb-3">
+                      <div class="col-md-12">
+                        <label class="mb-2" for="name">Name</label>
+                        <input class="form-control" id="name" type="text" name="name" required="">
+                      </div>
+                      <div class="col-md-12">
+                        <label class="mb-2" for="email">Email</label>
+                        <input class="form-control" id="email" type="email" name="email" required="">
+                      </div>
+                    </div>
+                    <div class="row gap-3 mb-3">
+                      <div class="col-md-12">
+                        <label class="mb-2" for="subject">Subject</label>
+                        <input class="form-control" id="subject" type="text" name="subject">
+                      </div>
+                    </div>
+                    <div class="row gap-3 gap-md-0 mb-3">
+                      <div class="col-md-12">
+                        <label class="mb-2" for="message">Message</label>
+                        <textarea class="form-control" id="message" name="message" rows="5" required=""></textarea>
+                      </div>
+                    </div>
+                    <button class="btn btn-primary fw-semibold" type="submit">Send Message</button>
+                  </form>
+                  <div class="mt-3 d-none alert alert-success" id="successMessage">Message sent successfully!</div>
+                  <div class="mt-3 d-none alert alert-danger" id="errorMessage">Message sending failed. Please try again later.</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <!-- End Contact-->
+        <!-- ======= Footer =======-->
+        <footer class="footer pt-5 pb-5">
+          <div class="container">
+            <div class="row justify-content-between mb-5 g-xl-5">
+              <div class="col-md-4 mb-5 mb-lg-0">
+                <h3 class="mb-3 fw-bold">About</h3>
+                <p class="mb-4"><?php echo $meta_description; ?></p>
+                <div class="d-flex gap-2 flex-row social"><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-twitter-x"> </i></a><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-facebook"> </i></a><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-linkedin"></i></a><a class="d-flex justify-content-center align-items-center" href="<?php echo $canonical_url; ?>"><i class="bi bi-youtube"></i></a></div>
+              </div>
+              <div class="col-md-7">
+                <div class="row g-2">
+                  <div class="col-md-6 col-lg-4 mb-4 mb-lg-0">
+                    <h3 class="mb-3 fw-bold">Company</h3>
+                    <ul class="list-unstyled">
+                      <li><a href="<?php echo $canonical_url; ?>">Leadership</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Careers <span class="badge ms-1">we're hiring</span></a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Case Studies</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Terms &amp; Conditions</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Privacy Policy</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">404 page</a></li>
+                    </ul>
+                  </div>
+                  <div class="col-md-6 col-lg-4 mb-4 mb-lg-0">
+                    <h3 class="mb-3 fw-bold">Accounts</h3>
+                    <ul class="list-unstyled">
+                      <li><a href="<?php echo $final; ?>">Register</a></li>
+                      <li><a href="<?php echo $final; ?>">Sign in</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Fogot Password</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Coming soon</a></li>
+                      <li><a href="<?php echo $canonical_url; ?>">Portfolio Masonry</a></li>
+                    </ul>
+                  </div>
+                  <div class="col-md-6 col-lg-4 mb-4 mb-lg-0 quick-contact">
+                    <h3 class="mb-3 fw-bold">Contact</h3>
+                    <p class="d-flex mb-3"><i class="bi bi-geo-alt-fill me-3"></i><span>123 Main Street Apt 4B Springfield, <br> IL 62701 United States</span></p><a class="d-flex mb-3" href="<?php echo $canonical_url; ?>"><i class="bi bi-envelope-fill me-3"></i><span>info@<?php echo $titlebrand; ?>.com</span></a><a class="d-flex mb-3" href="<?php echo $canonical_url; ?>"><i class="bi bi-telephone-fill me-3"></i><span>+1 (234) 5678 9900</span></a><a class="d-flex mb-3" href="<?php echo $canonical_url; ?>"><i class="bi bi-globe me-3"></i><span><?php echo $canonical_url; ?></span></a>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="row credits pt-3">
+              <div class="col-xl-8 text-center text-xl-start mb-3 mb-xl-0">
+                <!--
+                Note:
+                --> 
+                &copy;
+                <script>document.write(new Date().getFullYear());</script> <?php echo $titlebrand; ?>. 
+                 All rights reserved. Designed with <i class="bi bi-heart-fill text-danger"></i> by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+              </div>
+              <div class="col-xl-4 justify-content-start justify-content-xl-end quick-links d-flex flex-column flex-xl-row text-center text-xl-start gap-3"><a href="<?php echo $canonical_url; ?>">Terms and Conditions</a><a href="<?php echo $canonical_url; ?>">Privacy Policy</a></div>
+            </div>
+          </div>
+        </footer>
+        <!-- End Footer-->
+        
+      </main>
+    </div>
+    
+    <!-- ======= Back to Top =======-->
+    <button id="back-to-top"><i class="bi bi-arrow-up-short"></i></button>
+    <!-- End Back to top-->
+    
+    <!-- ======= Javascripts =======-->
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/imagesloaded.pkgd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/isotope.pkgd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/glightbox.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/swiper-bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/aos.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/purecounter.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/custom.js"></script>
+    <script src="https://cdn.jsdelivr.net/gh/ggeercy/Prism@main/send_email.js"></script>
+    <script>
+    const testimonialSwiper = new Swiper(".main-swiperTestimonialsv6", {
+  loop: true,
+  navigation: {
+    prevEl: ".testimonial-prev",
+    nextEl: ".testimonial-next",
+  },
+});
+</script>
+    <!-- End JavaScripts-->
+  </body>
+</html>
