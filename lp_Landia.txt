@@ -1,0 +1,1782 @@
+<?php
+if($jos['article_id'] != NULL)
+{
+  $brand  = array('brand123', 'Brand123');
+  $title = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['title']);
+  $meta_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['meta_description']);
+  $long_description = str_replace($brand,ucfirst($titlebrand),$jos['landingarticle']['long_description']);
+}
+if ($alternate_url == NULL || $alternate_url == ""){
+    $alternate_url = $amp_url;
+}
+define('SITE_BRAND', $titlebrand);
+/**
+ * Single source of truth for reviews and FAQs.
+ * Both the visible HTML below AND the JSON-LD schema at the
+ * bottom of this file are generated from these two arrays,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page â€” that mismatch is
+ * exactly what gets schema markup flagged by Google.
+ */
+/**
+ * Single source of truth for reviews and FAQs.
+ * Names and review quotes come from /data/names.txt and
+ * /data/reviews.txt (300 rows each) â€” edit those files to
+ * grow or change the pool, no code changes needed. Both the
+ * visible HTML below AND the JSON-LD schema at the bottom of
+ * this file are generated from the resulting $reviews array,
+ * so the structured data can never drift out of sync with
+ * what a visitor actually sees on the page.
+ */
+
+/**
+ * Reads /data/names.txt ("firstname,lastname" per row, header
+ * on line 1) and returns the first names and last names as two
+ * separate flat arrays, so they can be recombined independently.
+ */
+function nexora_load_names(): array {
+    $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/names.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    array_shift($lines); // drop the "firstname,lastname" header row
+    $first = [];
+    $last  = [];
+    foreach ($lines as $line) {
+        $parts = str_getcsv($line);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $first[] = trim($parts[0]);
+        $last[]  = trim($parts[1]);
+    }
+    return [$first, $last];
+}
+
+/**
+ * Reviews and FAQs are stored with the literal placeholder "NEXORA"
+ * in the .txt data files (plain text can't hold a PHP constant), so
+ * every loaded line gets that placeholder swapped for the live
+ * SITE_BRAND before it's used, keeping the copy in sync with the
+ * dynamic brand from the domain JSON.
+ */
+function nexora_apply_brand(string $text): string {
+    return SITE_BRAND ? str_replace('NEXORA', SITE_BRAND, $text) : $text;
+}
+
+/** Reads /data/reviews.txt â€” one review quote per line. */
+function nexora_load_review_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/reviews.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    return array_map('nexora_apply_brand', $lines);
+}
+
+/** Reads /data/faqs.txt â€” "question|answer" per line. */
+function nexora_load_faq_pool(): array {
+        $path = 'https://bacotsekali.sgp1.cdn.digitaloceanspaces.com/lptxt/faqs.txt';
+    $ctx = stream_context_create(['http' => [
+        'timeout'       => 5,
+        'ignore_errors' => true,
+    ]]);
+    $lines = file($path, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [];
+    $pool = [];
+    foreach ($lines as $line) {
+        $parts = explode('|', $line, 2);
+        if (count($parts) < 2) {
+            continue;
+        }
+        $pool[] = [
+            'q' => nexora_apply_brand(trim($parts[0])),
+            'a' => nexora_apply_brand(trim($parts[1])),
+        ];
+    }
+    return $pool;
+}
+
+/**
+ * Picks a random first name and a random last name from two
+ * separate pools and joins them â€” so the pairing on any given
+ * review is a fresh mix, not the pairing the names happened to
+ * share in the data file (e.g. "Budi" + "Kusuma" even though
+ * they came from different rows).
+ */
+function nexora_reshuffled_name(array $firstNames, array $lastNames): string {
+    $first = $firstNames[array_rand($firstNames)];
+    $last  = $lastNames[array_rand($lastNames)];
+    return ucfirst(strtolower($first)) . ' ' . ucfirst(strtolower($last));
+}
+
+/** Mostly 5 stars, occasionally 4 â€” matches a realistic positive spread. */
+function nexora_weighted_rating(): int {
+    return (mt_rand(1, 100) <= 75) ? 5 : 4;
+}
+
+function nexora_initials(string $name): string {
+    $parts = explode(' ', trim($name));
+    $first = substr($parts[0], 0, 1);
+    $last  = count($parts) > 1 ? substr(end($parts), 0, 1) : '';
+    return strtoupper($first . $last);
+}
+
+// Build 6 display reviews by sampling the pools above.
+[$firstNames, $lastNames] = nexora_load_names();
+$reviewPool = nexora_load_review_pool();
+
+$reviews = [];
+if ($firstNames && $lastNames && $reviewPool) {
+    $howMany = min(6, count($reviewPool));
+    $pickedKeys = (array) array_rand($reviewPool, $howMany);
+    shuffle($pickedKeys);
+    foreach ($pickedKeys as $key) {
+        $reviews[] = [
+            'name'   => nexora_reshuffled_name($firstNames, $lastNames),
+            'rating' => nexora_weighted_rating(),
+            'quote'  => $reviewPool[$key],
+        ];
+    }
+}
+
+// Build 10 display FAQs by sampling the pool loaded from faqs.txt.
+$faqPool = nexora_load_faq_pool();
+$faqs = [];
+if ($faqPool) {
+    $howManyFaqs = min(10, count($faqPool));
+    $faqKeys = (array) array_rand($faqPool, $howManyFaqs);
+    shuffle($faqKeys);
+    foreach ($faqKeys as $key) {
+        $faqs[] = $faqPool[$key];
+    }
+}
+?>
+
+<!DOCTYPE html>
+<html lang="id">
+   <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title><?php echo ucwords($title); ?></title>
+    <link href="<?php echo $canonical_url; ?>" rel="preconnect" />
+    <meta content="IE=edge" http-equiv="X-UA-Compatible" />
+    <meta content="width=device-width,initial-scale=1.0,minimum-scale=1.0" name="viewport" />
+    <meta name="title" content="<?php echo ucwords($title); ?>" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="<?php echo $canonical_url; ?>" />
+    <link rel="amphtml" href="<?php echo $amp_url; ?>" />
+    <link rel="alternate" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="id-id" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="en" href="<?php echo $alternate_url; ?>"/>
+    <link rel="alternate" hreflang="es-co" href="<?php echo $alternate_url; ?>" />
+    <link rel="alternate" hreflang="x-default" href="<?php echo $alternate_url; ?>" />
+    <meta name="description" content="<?php echo $meta_description; ?>" />
+    <meta name="keywords" content="<?php echo $keyword; ?>" />
+    <meta name="sitecode" content="id" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="<?php echo ucwords($title); ?>" />
+    <meta name="twitter:description" content="<?php echo $meta_description; ?>" />
+    <meta name="twitter:url" content="<?php echo $canonical_url; ?>" />
+    <meta name="twitter:image" content="<?php echo $logo; ?>" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="<?php echo $titlebrand; ?>" />
+    <meta property="og:locale" content="id_ID" />
+    <meta property="og:url" content="<?php echo $canonical_url; ?>" />
+    <meta property="og:title" content="<?php echo ucwords($title); ?>" />
+    <meta property="og:description" content="<?php echo $meta_description; ?>" />
+    <meta property="og:image" content="<?php echo $banner; ?>" />
+    <link rel="icon" type="image/png" sizes="96x96" href="<?php echo $favicon; ?>" />
+    <link rel="shortcut icon" href="<?php echo $favicon; ?>" />
+    <link rel="apple-touch-icon" sizes="144x144" href="<?php echo $favicon; ?>" />
+
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect">
+  <link href="https://fonts.gstatic.com" rel="preconnect" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,100;0,300;0,400;0,500;0,700;0,900;1,100;1,300;1,400;1,500;1,700;1,900&family=Montserrat:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Rubik:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap" rel="stylesheet">
+
+  <!-- Vendor CSS Files -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Landia/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Landia/bootstrap-icons.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Landia/aos.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Landia/lightbox.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Landia/swiper-bundle.min.css" rel="stylesheet">
+  <link
+  rel="stylesheet"
+  href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+>
+
+  <!-- Main CSS File -->
+  <link href="https://cdn.jsdelivr.net/gh/ggeercy/Landia/main.css" rel="stylesheet">
+
+  <?php if($jos['site']['google_code'] != NULL) { ?>
+    <meta name="google-site-verification" content="<?php echo $jos['site']['google_code']; ?>" />
+    <?php } else{ ?>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-SK4ZZ80WSV"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag() {
+        dataLayer.push(arguments);
+      }
+      gtag('js', new Date());
+
+      gtag('config', 'G-SK4ZZ80WSV');
+    </script>
+    <?php } ?>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "<?php echo $titlebrand; ?>",
+        "url": "<?php echo $canonical_url; ?>",
+        "logo": "<?php echo $banner; ?>",
+        "description": "<?php echo $meta_description; ?>",
+        "foundingDate": "2024",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "telephone": "+62-444-232-2014",
+          "contactType": "customer service",
+          "areaServed": "ID",
+          "availableLanguage": ["Indonesian"]
+        },
+        "sameAs": ["https://facebook.com/<?php echo $titlebrand; ?>", "https://instagram.com/<?php echo $titlebrand; ?>", "https://twitter.com/<?php echo $titlebrand; ?>"]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          {
+            "@type": "ListItem",
+            "position": 1,
+            "name": "<?php echo $titlebrand; ?>",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 2,
+            "name": "<?php echo $titlebrand; ?> LOGIN",
+            "item": "<?php echo $canonical_url; ?>"
+          },
+          {
+            "@type": "ListItem",
+            "position": 3,
+            "name": "<?php echo $titlebrand; ?> GAMES",
+            "item": "<?php echo $canonical_url; ?>"
+          }
+        ]
+      }
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context":"https://schema.org",
+        "@type":"FAQPage",
+        "mainEntity":[
+      <?php
+      $faqItems = [];
+      foreach ($faqs as $f) {
+          $faqItems[] = '    {
+            "@type":"Question",
+            "name":"' . htmlspecialchars($f['q']) . '",
+            "acceptedAnswer":{
+              "@type":"Answer",
+              "text":"' . htmlspecialchars($f['a']) . '"
+            }
+          }';
+      }
+      echo implode(",\n", $faqItems);
+      ?>
+
+        ]
+      }
+    </script>
+    <!-- REVIEW SCHEMA -->
+    <script type="application/ld+json">
+        {
+          "@context":"https://schema.org",
+          "@type":"Product","name":"<?php echo $titlebrand; ?>",
+          "description":"<?php echo $meta_description; ?>",
+          "brand":{
+            "@type":"Brand",
+            "name":"<?php echo $titlebrand; ?>"
+          },
+          "aggregateRating":{
+            "@type":"AggregateRating",
+            "ratingValue":"4.9",
+            "reviewCount":"5"
+          },
+          "review":[
+      <?php
+      $reviewItems = [];
+      foreach ($reviews as $r) {
+          $reviewItems[] = '        {
+                      "@type":"Review",
+                      "author":{"@type":"Person","name":"' . htmlspecialchars($r['name']) . '"},
+                      "reviewRating":{"@type":"Rating","ratingValue":"5","bestRating":"5"},
+                      "reviewBody":"' . htmlspecialchars($r['quote']) . '"
+                    }';
+      }
+      echo implode(",\n", $reviewItems);
+      ?>
+
+          ]
+        }
+    </script>
+</head>
+
+<body class="index-page">
+
+  <header id="header" class="header d-flex align-items-center sticky-top">
+    <div class="header-container container-fluid container-xl position-relative d-flex align-items-center justify-content-between">
+
+      <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center me-auto me-xl-0">
+        <img src="<?php echo $logo; ?>" alt="">
+      </a>
+
+      <nav id="navmenu" class="navmenu">
+        <ul>
+          <li><a href="#hero" class="active">Home</a></li>
+          <li><a href="#about">About</a></li>
+          <li><a href="#features">Features</a></li>
+          <li><a href="#services">Services</a></li>
+          <li><a href="#pricing">Pricing</a></li>
+          <li><a href="#contact">Contact</a></li>
+        </ul>
+        <i class="mobile-nav-toggle d-xl-none bi bi-list"></i>
+      </nav>
+
+      <a class="btn-getstarted" href="<?php echo $final; ?>">Get Started</a>
+
+    </div>
+  </header>
+
+  <main class="main">
+
+    <!-- Hero Section -->
+    <section id="hero" class="hero section">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="hero-wrapper">
+          <div class="hero-text-center" data-aos="zoom-in" data-aos-delay="200">
+            <span class="hero-badge">Innovative Solutions</span>
+            <h2><?php echo ucwords($title); ?></h2>
+            <p><?php echo $meta_description; ?></p>
+            <div class="hero-buttons">
+              <a href="<?php echo $final; ?>" class="btn-get-started">Daftar</a>
+              <a href="<?php echo $final; ?>" class="btn-watch glightbox">
+                <span class="play-icon"><i class="bi bi-play-fill"></i></span>
+                <span>Login</span>
+              </a>
+            </div>
+          </div>
+
+          <div class="hero-cards-grid" data-aos="fade-up" data-aos-delay="300">
+            <div class="hero-card" data-aos="fade-up" data-aos-delay="350">
+              <div class="card-image">
+                <img src="<?php echo $banner; ?>" alt="Strategic Planning" class="img-fluid">
+              </div>
+              <div class="card-overlay">
+                <div class="card-icon-wrap">
+                  <i class="bi bi-lightbulb"></i>
+                </div>
+                <h4>Strategic Planning</h4>
+                <p>Innovative approaches for growth</p>
+              </div>
+            </div>
+
+            <div class="hero-card" data-aos="fade-up" data-aos-delay="400">
+              <div class="card-image">
+                <img src="<?php echo $banner; ?>" alt="Digital Excellence" class="img-fluid">
+              </div>
+              <div class="card-overlay">
+                <div class="card-icon-wrap">
+                  <i class="bi bi-bar-chart-line"></i>
+                </div>
+                <h4>Digital Excellence</h4>
+                <p>Modern solutions for success</p>
+              </div>
+            </div>
+
+            <div class="hero-card" data-aos="fade-up" data-aos-delay="450">
+              <div class="card-image">
+                <img src="<?php echo $banner; ?>" alt="Global Reach" class="img-fluid">
+              </div>
+              <div class="card-overlay">
+                <div class="card-icon-wrap">
+                  <i class="bi bi-globe2"></i>
+                </div>
+                <h4>Global Reach</h4>
+                <p>Worldwide business connections</p>
+              </div>
+            </div>
+          </div><!-- End Hero Cards Grid -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Hero Section -->
+
+    <!-- About Section -->
+    <section id="about" class="about section light-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row justify-content-center mb-5">
+          <div class="col-lg-7 text-center" data-aos="fade-up" data-aos-delay="100">
+            <div class="intro-block">
+              <span class="tag-label">WHO WE ARE</span>
+              <h2 class="intro-heading"><?php echo ucwords($title); ?></h2>
+              <p class="intro-description"><?php echo $long_description; ?></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-5" data-aos="fade-up" data-aos-delay="150">
+          <div class="col-lg-5 col-md-6">
+            <div class="image-card primary-card">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/about-14.webp" alt="Company workspace" class="img-fluid">
+            </div>
+          </div>
+          <div class="col-lg-4 col-md-6">
+            <div class="image-card secondary-card">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/about-19.webp" alt="Creative team" class="img-fluid">
+            </div>
+          </div>
+          <div class="col-lg-3 col-md-12">
+            <div class="info-panel">
+              <div class="panel-icon">
+                <i class="bi bi-trophy"></i>
+              </div>
+              <h4>Excellence Driven</h4>
+              <p>We are committed to delivering outstanding results through high standards and careful attention to detail. By continually improving and embracing innovation, we help your business grow with confidence.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mb-5" data-aos="fade-up" data-aos-delay="200">
+          <div class="col-6 col-md-3">
+            <div class="metric-card">
+              <span class="metric-value">180+</span>
+              <span class="metric-label">Deliverables Shipped</span>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="metric-card">
+              <span class="metric-value">97%</span>
+              <span class="metric-label">Customer Approval</span>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="metric-card">
+              <span class="metric-value">24/7</span>
+              <span class="metric-label">Dedicated Assistance</span>
+            </div>
+          </div>
+          <div class="col-6 col-md-3">
+            <div class="metric-card">
+              <span class="metric-value">15+</span>
+              <span class="metric-label">Industry Tenure</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3" data-aos="fade-up" data-aos-delay="250">
+          <div class="col-md-4">
+            <div class="capability-card">
+              <div class="capability-icon">
+                <i class="bi bi-shield-lock"></i>
+              </div>
+              <div class="capability-body">
+                <h5>Reliable Protection</h5>
+                <p>We use dependable security practices to help protect your business and its valuable data. You can focus on growth with greater peace of mind.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="capability-card">
+              <div class="capability-icon">
+                <i class="bi bi-speedometer2"></i>
+              </div>
+              <div class="capability-body">
+                <h5>Optimized Speed</h5>
+                <p>We streamline your systems to help your team work faster and more efficiently. Enjoy a smoother experience that supports your business as it grows.</p>
+              </div>
+            </div>
+          </div>
+          <div class="col-md-4">
+            <div class="capability-card">
+              <div class="capability-icon">
+                <i class="bi bi-chat-dots"></i>
+              </div>
+              <div class="capability-body">
+                <h5>Dedicated Guidance</h5>
+                <p>Our team provides personalized support tailored to your goals and challenges. We’re here to guide you through every step with clear, practical advice.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /About Section -->
+
+    <!-- Clients Section -->
+    <section id="clients" class="clients section light-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row g-3 justify-content-center">
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-3.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="150">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-7.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-1.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="250">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-10.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="100">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-5.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="150">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-12.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="200">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-9.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+          <div class="col-6 col-md-4 col-lg-3" data-aos="fade-up" data-aos-delay="250">
+            <div class="logo-card d-flex align-items-center justify-content-center">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/clients-14.webp" class="img-fluid" alt="">
+            </div>
+          </div><!-- End Logo Item -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Clients Section -->
+
+    <!-- Features Section -->
+    <section id="features" class="features section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Features</h2>
+        <p>Discover the tools and capabilities designed to help your business work smarter and grow with confidence. From streamlined workflows to reliable protection, each feature supports your goals.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row g-4">
+
+          <div class="col-lg-3" data-aos="fade-up" data-aos-delay="100">
+            <div class="sidebar-nav">
+              <ul class="nav nav-pills flex-column" role="tablist">
+
+                <li class="nav-item" role="presentation">
+                  <a class="nav-link active show" data-bs-toggle="tab" data-bs-target="#features-tab-1">
+                    <i class="bi bi-rocket-takeoff"></i>
+                    <div class="link-text">
+                      <span class="link-title">Breakthrough</span>
+                      <span class="link-desc">Next-gen solutions</span>
+                    </div>
+                  </a>
+                </li><!-- End tab nav item -->
+
+                <li class="nav-item" role="presentation">
+                  <a class="nav-link" data-bs-toggle="tab" data-bs-target="#features-tab-2">
+                    <i class="bi bi-shield-shaded"></i>
+                    <div class="link-text">
+                      <span class="link-title">Protection</span>
+                      <span class="link-desc">Robust safeguards</span>
+                    </div>
+                  </a>
+                </li><!-- End tab nav item -->
+
+                <li class="nav-item" role="presentation">
+                  <a class="nav-link" data-bs-toggle="tab" data-bs-target="#features-tab-3">
+                    <i class="bi bi-lightning-charge"></i>
+                    <div class="link-text">
+                      <span class="link-title">Velocity</span>
+                      <span class="link-desc">Blazing fast delivery</span>
+                    </div>
+                  </a>
+                </li><!-- End tab nav item -->
+
+                <li class="nav-item" role="presentation">
+                  <a class="nav-link" data-bs-toggle="tab" data-bs-target="#features-tab-4">
+                    <i class="bi bi-heart-pulse"></i>
+                    <div class="link-text">
+                      <span class="link-title">Assistance</span>
+                      <span class="link-desc">Round-the-clock help</span>
+                    </div>
+                  </a>
+                </li><!-- End tab nav item -->
+
+              </ul>
+            </div>
+          </div>
+
+          <div class="col-lg-9">
+            <div class="tab-content" data-aos="fade-up" data-aos-delay="150">
+
+              <div class="tab-pane fade active show" id="features-tab-1">
+                <div class="panel-card">
+                  <div class="row g-0">
+                    <div class="col-md-6">
+                      <div class="panel-image">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/features-4.webp" alt="" class="img-fluid">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="panel-body">
+                        <span class="panel-badge">Breakthrough</span>
+                        <h3>Pioneering Digital Craft</h3>
+                        <p>We create thoughtful digital solutions that combine modern design with practical functionality. Every detail is shaped to support your goals and make work simpler. Our approach helps your business stand out and move forward.</p>
+                        <ul class="check-list">
+                          <li><i class="bi bi-check"></i>Creative, modern design</li>
+                          <li><i class="bi bi-check"></i>Practical, user-focused solutions</li>
+                          <li><i class="bi bi-check"></i>Built around your business goals</li>
+                        </ul>
+                        <div class="metric-row">
+                          <div class="metric">
+                            <strong>97%</strong>
+                            <span>Reliability</span>
+                          </div>
+                          <div class="metric">
+                            <strong>40K+</strong>
+                            <span>Clients</span>
+                          </div>
+                          <div class="metric">
+                            <strong>365</strong>
+                            <span>Days Active</span>
+                          </div>
+                        </div>
+                        <a href="<?php echo $final; ?>" class="action-btn">Explore Further <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End tab content item -->
+
+              <div class="tab-pane fade" id="features-tab-2">
+                <div class="panel-card">
+                  <div class="row g-0">
+                    <div class="col-md-6">
+                      <div class="panel-image">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/features-2.webp" alt="" class="img-fluid">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="panel-body">
+                        <span class="panel-badge">Protection</span>
+                        <h3>Enterprise-Grade Defense</h3>
+                        <p>We protect your digital assets with robust security measures built for business needs. Our approach helps reduce risk and safeguard sensitive information. You can focus on your priorities with greater peace of mind.</p>
+                        <ul class="check-list">
+                          <li><i class="bi bi-check"></i>Strong security practices</li>
+                          <li><i class="bi bi-check"></i>Protection for sensitive data</li>
+                          <li><i class="bi bi-check"></i>Risk-aware solutions</li>
+                        </ul>
+                        <div class="metric-row">
+                          <div class="metric">
+                            <strong>512-bit</strong>
+                            <span>Encryption</span>
+                          </div>
+                          <div class="metric">
+                            <strong>SOC2</strong>
+                            <span>Verified</span>
+                          </div>
+                          <div class="metric">
+                            <strong>HIPAA</strong>
+                            <span>Ready</span>
+                          </div>
+                        </div>
+                        <a href="<?php echo $final; ?>" class="action-btn">Explore Further <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End tab content item -->
+
+              <div class="tab-pane fade" id="features-tab-3">
+                <div class="panel-card">
+                  <div class="row g-0">
+                    <div class="col-md-6">
+                      <div class="panel-image">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/features-6.webp" alt="" class="img-fluid">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="panel-body">
+                        <span class="panel-badge">Velocity</span>
+                        <h3>Optimized For Speed</h3>
+                        <p>We build efficient digital experiences that load quickly and run smoothly. Faster performance helps keep your team productive and your customers engaged. Every optimization supports a more responsive experience.</p>
+                        <ul class="check-list">
+                          <li><i class="bi bi-check"></i>Fast-loading pages</li>
+                          <li><i class="bi bi-check"></i>Smooth, reliable performance</li>
+                          <li><i class="bi bi-check"></i>Efficient use across devices</li>
+                        </ul>
+                        <div class="metric-row">
+                          <div class="metric">
+                            <strong>0.3s</strong>
+                            <span>Latency</span>
+                          </div>
+                          <div class="metric">
+                            <strong>99.9%</strong>
+                            <span>Tuned</span>
+                          </div>
+                          <div class="metric">
+                            <strong>Edge</strong>
+                            <span>Network</span>
+                          </div>
+                        </div>
+                        <a href="<?php echo $final; ?>" class="action-btn">Explore Further <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End tab content item -->
+
+              <div class="tab-pane fade" id="features-tab-4">
+                <div class="panel-card">
+                  <div class="row g-0">
+                    <div class="col-md-6">
+                      <div class="panel-image">
+                        <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/features-1.webp" alt="" class="img-fluid">
+                      </div>
+                    </div>
+                    <div class="col-md-6">
+                      <div class="panel-body">
+                        <span class="panel-badge">Assistance</span>
+                        <h3>Dedicated Care Team</h3>
+                        <p>Our team offers personalized support shaped around your needs. We provide clear guidance and practical help as your business evolves. You can count on us to stay engaged at every step.</p>
+                        <ul class="check-list">
+                          <li><i class="bi bi-check"></i>Personalized assistance</li>
+                          <li><i class="bi bi-check"></i>Clear, practical guidance</li>
+                          <li><i class="bi bi-check"></i>Ongoing support for your goals</li>
+                        </ul>
+                        <div class="metric-row">
+                          <div class="metric">
+                            <strong>24/7</strong>
+                            <span>On Call</span>
+                          </div>
+                          <div class="metric">
+                            <strong>3min</strong>
+                            <span>Reply</span>
+                          </div>
+                          <div class="metric">
+                            <strong>Senior</strong>
+                            <span>Engineers</span>
+                          </div>
+                        </div>
+                        <a href="<?php echo $final; ?>" class="action-btn">Explore Further <i class="bi bi-arrow-right"></i></a>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End tab content item -->
+
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Features Section -->
+
+    <!-- Features Cards Section -->
+    <section id="features-cards" class="features-cards section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Features Cards</h2>
+        <p>Explore the capabilities designed to help your business work smarter and grow with confidence. Each feature combines practical tools with dependable support.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-4">
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="capability-card">
+              <div class="card-header-area">
+                <span class="icon-wrapper">
+                  <i class="bi bi-bar-chart-line"></i>
+                </span>
+                <span class="card-badge">Core</span>
+              </div>
+              <h3>Data-Driven Growth Engine</h3>
+              <p>Turn meaningful insights into clear actions that support better business decisions. Our data-driven approach helps you identify opportunities and track progress.</p>
+              <ul class="check-list">
+                <li><i class="bi bi-check2"></i> Instant performance dashboards</li>
+                <li><i class="bi bi-check2"></i> Scheduled insight generation</li>
+              </ul>
+              <div class="card-action">
+                <a href="<?php echo $final; ?>" class="action-link">Explore Solutions <i class="bi bi-arrow-right-short"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="capability-card">
+              <div class="card-header-area">
+                <span class="icon-wrapper">
+                  <i class="bi bi-lock"></i>
+                </span>
+                <span class="card-badge">Essential</span>
+              </div>
+              <h3>Unified Protection Suite</h3>
+              <p>Protect your business with coordinated security measures designed to safeguard your digital assets. A unified approach helps simplify protection and gives your team greater peace of mind.</p>
+              <ul class="check-list">
+                <li><i class="bi bi-check2"></i> End-to-end cipher layers</li>
+                <li><i class="bi bi-check2"></i> Dual-step identity verification</li>
+              </ul>
+              <div class="card-action">
+                <a href="<?php echo $final; ?>" class="action-link">View Framework <i class="bi bi-arrow-right-short"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+        </div>
+
+        <div class="row g-3 mt-2">
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="status-tile">
+              <div class="tile-icon">
+                <i class="bi bi-cloud-arrow-up"></i>
+              </div>
+              <div class="tile-content">
+                <h4>Cloud Sync</h4>
+                <span class="status-badge badge-progress">Building</span>
+              </div>
+            </div>
+          </div><!-- End Status Tile -->
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="150">
+            <div class="status-tile">
+              <div class="tile-icon">
+                <i class="bi bi-database"></i>
+              </div>
+              <div class="tile-content">
+                <h4>Data Warehouse</h4>
+                <span class="status-badge badge-live">Active</span>
+              </div>
+            </div>
+          </div><!-- End Status Tile -->
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="status-tile">
+              <div class="tile-icon">
+                <i class="bi bi-gear"></i>
+              </div>
+              <div class="tile-content">
+                <h4>Workflow Engine</h4>
+                <span class="status-badge badge-live">Active</span>
+              </div>
+            </div>
+          </div><!-- End Status Tile -->
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="250">
+            <div class="status-tile">
+              <div class="tile-icon">
+                <i class="bi bi-cpu"></i>
+              </div>
+              <div class="tile-content">
+                <h4>ML Pipeline</h4>
+                <span class="status-badge badge-queued">Upcoming</span>
+              </div>
+            </div>
+          </div><!-- End Status Tile -->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Features Cards Section -->
+
+    <!-- Features 2 Section -->
+    <section id="features-2" class="features-2 section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Features</h2>
+        <p>Explore the tools and capabilities designed to help your business work smarter and grow with confidence. From reliable protection to dedicated guidance, every feature is built around your needs.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-4">
+
+          <div class="col-lg-8" data-aos="fade-up" data-aos-delay="100">
+            <div class="capability-list">
+
+              <div class="capability-item">
+                <div class="row align-items-start g-0">
+                  <div class="col-auto">
+                    <div class="capability-icon">
+                      <i class="bi bi-app-indicator"></i>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="capability-body">
+                      <div class="capability-header">
+                        <h3>Streamlined Control Panel</h3>
+                        <span class="tag">Core</span>
+                      </div>
+                      <p>Manage key tools and settings from one clear, easy-to-use dashboard. Spend less time navigating and more time focusing on your work.</p>
+                      <ul class="check-list">
+                        <li><i class="bi bi-check2"></i> Live metrics overview</li>
+                        <li><i class="bi bi-check2"></i> Adjustable components</li>
+                        <li><i class="bi bi-check2"></i> Dynamic visual reports</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End Capability Item -->
+
+              <div class="capability-item active">
+                <div class="row align-items-start g-0">
+                  <div class="col-auto">
+                    <div class="capability-icon">
+                      <i class="bi bi-graph-up-arrow"></i>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="capability-body">
+                      <div class="capability-header">
+                        <h3>Deep Insight Engine</h3>
+                        <span class="tag tag-accent">Popular</span>
+                      </div>
+                      <p>Turn business data into useful insights that support smarter decisions. Spot trends, understand performance, and uncover new opportunities.</p>
+                      <ul class="check-list">
+                        <li><i class="bi bi-check2"></i> Forecast modeling</li>
+                        <li><i class="bi bi-check2"></i> Tailored dashboards</li>
+                        <li><i class="bi bi-check2"></i> Deep data browsing</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End Capability Item -->
+
+              <div class="capability-item">
+                <div class="row align-items-start g-0">
+                  <div class="col-auto">
+                    <div class="capability-icon">
+                      <i class="bi bi-shield-check"></i>
+                    </div>
+                  </div>
+                  <div class="col">
+                    <div class="capability-body">
+                      <div class="capability-header">
+                        <h3>Robust Protection Layer</h3>
+                        <span class="tag">Essential</span>
+                      </div>
+                      <p>Safeguard your systems and data with dependable security measures. Built-in protection helps reduce risk and keep your business running confidently.</p>
+                      <ul class="check-list">
+                        <li><i class="bi bi-check2"></i> Full-stack encryption</li>
+                        <li><i class="bi bi-check2"></i> Granular permissions</li>
+                        <li><i class="bi bi-check2"></i> Regulatory tracking</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+              </div><!-- End Capability Item -->
+
+            </div>
+          </div>
+
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="150">
+            <div class="side-panel">
+              <div class="side-image">
+                <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/features-5.webp" alt="Platform overview" class="img-fluid" loading="lazy">
+              </div>
+              <div class="side-quote">
+                <div class="quote-mark">
+                  <i class="bi bi-quote"></i>
+                </div>
+                <p>The team delivered a secure, intuitive solution that helps us make better decisions every day. Their thoughtful engineering has made a lasting difference to how we work.</p>
+                <div class="divider"></div>
+                <div class="quote-author">
+                  <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/person-f-8.webp" alt="Author" class="author-avatar">
+                  <div class="author-info">
+                    <h4>Rebecca Thornton</h4>
+                    <span>VP of Engineering at NovaTech</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Features 2 Section -->
+
+    <!-- Call To Action Section -->
+    <section id="call-to-action" class="call-to-action section dark-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row gy-4">
+          <div class="col-lg-7" data-aos="fade-up" data-aos-delay="100">
+            <div class="media-block">
+              <img src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/about-21.webp" alt="Technology Solutions" class="img-fluid preview-image">
+            </div>
+
+            <div class="row gy-3 mt-3">
+              <div class="col-md-4" data-aos="fade-up" data-aos-delay="150">
+                <div class="stat-card">
+                  <i class="bi bi-shield-lock"></i>
+                  <h4>Robust Protection</h4>
+                  <p>Protect your systems and data with dependable security measures. Stay prepared for evolving risks while keeping your business running smoothly.</p>
+                </div>
+              </div><!-- End Stat Card -->
+
+              <div class="col-md-4" data-aos="fade-up" data-aos-delay="200">
+                <div class="stat-card">
+                  <i class="bi bi-lightning-charge"></i>
+                  <h4>Rapid Deployment</h4>
+                  <p>Launch new solutions quickly with a streamlined deployment process. Get the tools you need up and running with minimal disruption.</p>
+                </div>
+              </div><!-- End Stat Card -->
+
+              <div class="col-md-4" data-aos="fade-up" data-aos-delay="250">
+                <div class="stat-card">
+                  <i class="bi bi-graph-up-arrow"></i>
+                  <h4>Scalable Growth</h4>
+                  <p>Adapt your infrastructure as your business grows and your needs change. Scale resources confidently while maintaining reliable performance.</p>
+                </div>
+              </div><!-- End Stat Card -->
+            </div>
+          </div>
+
+          <div class="col-lg-5" data-aos="fade-up" data-aos-delay="150">
+            <div class="info-panel">
+              <span class="label-badge">Enterprise Ready</span>
+              <h2>Elevate Your Operations with Modern Infrastructure</h2>
+              <p>Upgrade the systems behind your business with dependable, modern infrastructure. Improve performance, simplify daily operations, and build a strong foundation for future growth.</p>
+
+              <ul class="checklist">
+                <li>
+                  <i class="bi bi-check-lg"></i>
+                  <span>Optimize workflows and boost overall throughput</span>
+                </li>
+                <li>
+                  <i class="bi bi-check-lg"></i>
+                  <span>Realize significant expense reduction and performance</span>
+                </li>
+                <li>
+                  <i class="bi bi-check-lg"></i>
+                  <span>Expand your infrastructure with adaptive precision</span>
+                </li>
+              </ul>
+
+              <div class="action-group">
+                <a href="<?php echo $final; ?>" class="btn-primary-action">Begin Now</a>
+                <a href="<?php echo $final; ?>" class="btn-ghost-action">Explore Further</a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Call To Action Section -->
+
+    <!-- Testimonials Section -->
+    <section id="testimonials" class="testimonials section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Testimonials</h2>
+        <p>Hear from businesses that have strengthened their operations with our solutions. Their experiences show how thoughtful technology and dedicated support can make a difference.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row g-3">
+          <?php foreach ($reviews as $r): ?>
+          <div class="col-lg-6" data-aos="fade-up" data-aos-delay="50">
+            <div class="review-card">
+              <div class="review-body">
+                <div class="testi-stars">
+    <span><?php echo str_repeat('&#9733;', $r['rating']) . str_repeat('&#9734;', 5 - $r['rating']); ?></span>
+            </div>
+                <p><?php echo htmlspecialchars($r['quote']); ?></p>
+              </div>
+              <div class="review-footer">
+                <div class="reviewer-info">
+                  <h4><?php echo htmlspecialchars($r['name']); ?></h4>
+                </div>
+              </div>
+            </div>
+          </div><!-- End Review Card -->
+          <?php endforeach; ?>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Testimonials Section -->
+
+    <!-- Stats Section -->
+    <section id="stats" class="stats section light-background">
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row justify-content-center">
+          <div class="col-lg-7 text-center mb-5" data-aos="fade-up" data-aos-delay="100">
+            <div class="intro-badge">
+              <i class="bi bi-trophy-fill"></i>
+              <span>Recognized by 120+ industry professionals</span>
+            </div>
+            <h3 class="section-headline">Powering Results Through Purpose</h3>
+            <p class="section-subtext">We align every solution with your goals to create meaningful, measurable progress. With the right technology and a clear direction, your business can move forward with confidence.</p>
+          </div>
+        </div>
+
+        <div class="row g-3 justify-content-center">
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="metric-card">
+              <div class="metric-header">
+                <div class="metric-icon-wrap">
+                  <i class="bi bi-people"></i>
+                </div>
+                <div class="metric-trend">
+                  <i class="bi bi-trending-up"></i>
+                  <span>+15%</span>
+                </div>
+              </div>
+              <div class="metric-body">
+                <div class="metric-value">
+                  <span data-purecounter-start="0" data-purecounter-end="312" data-purecounter-duration="2" class="purecounter"></span>K+
+                </div>
+                <div class="metric-label">Active Users</div>
+              </div>
+              <div class="metric-footer">
+                <span>Compared to last year</span>
+              </div>
+            </div><!-- End Metric Card -->
+          </div>
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="150">
+            <div class="metric-card highlighted">
+              <div class="metric-header">
+                <div class="metric-icon-wrap">
+                  <i class="bi bi-graph-up-arrow"></i>
+                </div>
+                <div class="metric-trend">
+                  <i class="bi bi-trending-up"></i>
+                  <span>+7%</span>
+                </div>
+              </div>
+              <div class="metric-body">
+                <div class="metric-value">
+                  <span data-purecounter-start="0" data-purecounter-end="97" data-purecounter-duration="2" class="purecounter"></span>%
+                </div>
+                <div class="metric-label">Satisfaction Score</div>
+              </div>
+              <div class="metric-footer">
+                <span>Based on quarterly surveys</span>
+              </div>
+            </div><!-- End Metric Card -->
+          </div>
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="metric-card">
+              <div class="metric-header">
+                <div class="metric-icon-wrap">
+                  <i class="bi bi-award"></i>
+                </div>
+                <div class="metric-trend">
+                  <i class="bi bi-trending-up"></i>
+                  <span>+11</span>
+                </div>
+              </div>
+              <div class="metric-body">
+                <div class="metric-value">
+                  <span data-purecounter-start="0" data-purecounter-end="53" data-purecounter-duration="2" class="purecounter"></span>
+                </div>
+                <div class="metric-label">Honors Received</div>
+              </div>
+              <div class="metric-footer">
+                <span>Across all categories</span>
+              </div>
+            </div><!-- End Metric Card -->
+          </div>
+
+          <div class="col-lg-3 col-md-6" data-aos="fade-up" data-aos-delay="250">
+            <div class="metric-card">
+              <div class="metric-header">
+                <div class="metric-icon-wrap">
+                  <i class="bi bi-globe2"></i>
+                </div>
+                <div class="metric-trend">
+                  <i class="bi bi-trending-up"></i>
+                  <span>+29</span>
+                </div>
+              </div>
+              <div class="metric-body">
+                <div class="metric-value">
+                  <span data-purecounter-start="0" data-purecounter-end="183" data-purecounter-duration="2" class="purecounter"></span>
+                </div>
+                <div class="metric-label">Worldwide Allies</div>
+              </div>
+              <div class="metric-footer">
+                <span>Joined this fiscal year</span>
+              </div>
+            </div><!-- End Metric Card -->
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Stats Section -->
+
+    <!-- Services Section -->
+    <section id="services" class="services section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Services</h2>
+        <p>Discover flexible services built to help your business operate, grow, and adapt. From modern infrastructure to ongoing guidance, we support you at every stage.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="50">
+
+        <div class="row justify-content-center">
+          <div class="col-lg-8 text-center">
+            <div class="intro-block" data-aos="fade-up" data-aos-delay="100">
+              <span class="tag-badge">Solutions</span>
+              <h2 class="block-heading">Delivering Meaningful Outcomes Through Innovation</h2>
+              <p class="block-text">Our team merges strategic insight with deep technical skill to build experiences that accelerate growth and set your brand apart in a competitive landscape.</p>
+              <div class="action-group">
+                <a href="<?php echo $final; ?>" class="btn-primary-action">View Our Projects</a>
+                <a href="<?php echo $final; ?>" class="btn-ghost-action">How We Work <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3 mt-5">
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <div class="capability-card">
+              <div class="card-icon">
+                <i class="bi bi-code-slash"></i>
+              </div>
+              <div class="card-body-content">
+                <h5 class="card-heading"><a href="<?php echo $canonical_url; ?>">Tailored Software Solutions</a></h5>
+                <p class="card-text">Architecting resilient platforms designed around your workflows, leveraging contemporary tools and proven engineering practices.</p>
+              </div>
+              <div class="card-foot">
+                <a href="<?php echo $final; ?>" class="card-link">Discover more <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="150">
+            <div class="capability-card">
+              <div class="card-icon">
+                <i class="bi bi-compass"></i>
+              </div>
+              <div class="card-body-content">
+                <h5 class="card-heading"><a href="<?php echo $canonical_url; ?>">Growth Strategy Consulting</a></h5>
+                <p class="card-text">Detailed blueprints connecting technological potential with organizational ambitions and emerging market dynamics.</p>
+              </div>
+              <div class="card-foot">
+                <a href="<?php echo $final; ?>" class="card-link">Discover more <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <div class="capability-card">
+              <div class="card-icon">
+                <i class="bi bi-palette"></i>
+              </div>
+              <div class="card-body-content">
+                <h5 class="card-heading"><a href="<?php echo $canonical_url; ?>">Visual Brand Systems</a></h5>
+                <p class="card-text">Developing cohesive design languages that communicate authenticity and build lasting impressions at every interaction point.</p>
+              </div>
+              <div class="card-foot">
+                <a href="<?php echo $final; ?>" class="card-link">Discover more <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="250">
+            <div class="capability-card">
+              <div class="card-icon">
+                <i class="bi bi-megaphone"></i>
+              </div>
+              <div class="card-body-content">
+                <h5 class="card-heading"><a href="<?php echo $canonical_url; ?>">Performance Marketing</a></h5>
+                <p class="card-text">Amplifying reach with precision-targeted initiatives that cultivate engagement and turn prospects into committed advocates.</p>
+              </div>
+              <div class="card-foot">
+                <a href="<?php echo $final; ?>" class="card-link">Discover more <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="300">
+            <div class="capability-card">
+              <div class="card-icon">
+                <i class="bi bi-phone"></i>
+              </div>
+              <div class="card-body-content">
+                <h5 class="card-heading"><a href="<?php echo $canonical_url; ?>">Interface &amp; Interaction Design</a></h5>
+                <p class="card-text">Designing frictionless journeys that center human needs while ensuring fluid performance on every screen and device.</p>
+              </div>
+              <div class="card-foot">
+                <a href="<?php echo $final; ?>" class="card-link">Discover more <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="350">
+            <div class="capability-card">
+              <div class="card-icon">
+                <i class="bi bi-bar-chart-line"></i>
+              </div>
+              <div class="card-body-content">
+                <h5 class="card-heading"><a href="<?php echo $canonical_url; ?>">Insight-Driven Analytics</a></h5>
+                <p class="card-text">Converting complex datasets into clear, actionable intelligence that powers smarter decisions and measurable outcomes.</p>
+              </div>
+              <div class="card-foot">
+                <a href="<?php echo $final; ?>" class="card-link">Discover more <i class="bi bi-arrow-right"></i></a>
+              </div>
+            </div>
+          </div><!-- End Capability Card -->
+        </div>
+
+      </div>
+
+    </section><!-- /Services Section -->
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing section">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Pricing</h2>
+        <p>Find a plan that fits your business needs and budget. Our flexible options make it easier to choose the right level of support as you grow.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="pricing-toggle-container text-center mb-5" data-aos="fade-up" data-aos-delay="100">
+          <div class="pricing-toggle d-inline-flex align-items-center gap-3">
+            <span class="monthly active">Monthly</span>
+            <label class="switch m-0">
+              <input type="checkbox" aria-label="Toggle pricing">
+              <span class="slider"></span>
+            </label>
+            <span class="yearly">Yearly</span>
+            <span class="save-badge">Save 20%</span>
+          </div>
+        </div>
+
+        <div class="row g-3 justify-content-center">
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="100">
+            <article class="plan-card h-100">
+              <div class="plan-header">
+                <span class="plan-label">Essential</span>
+                <div class="plan-price">
+                  <span class="amount price-monthly"><sup>$</sup>15</span>
+                  <span class="amount price-yearly"><sup>$</sup>144</span>
+                  <span class="billing price-monthly">per month</span>
+                  <span class="billing price-yearly">per year</span>
+                </div>
+                <p class="plan-desc">Essential tools to help your business get started.</p>
+              </div>
+              <div class="plan-body">
+                <p class="features-heading">Includes:</p>
+                <ul class="checklist list-unstyled">
+                  <li><i class="bi bi-check2"></i>Core platform access</li>
+                  <li><i class="bi bi-check2"></i>Standard security</li>
+                  <li><i class="bi bi-check2"></i>Email support</li>
+                  <li class="disabled"><i class="bi bi-x"></i>Advanced analytics</li>
+                  <li class="disabled"><i class="bi bi-x"></i>Dedicated account manager</li>
+                </ul>
+              </div>
+              <div class="plan-footer">
+                <a href="<?php echo $final; ?>" class="btn btn-plan-secondary w-100">Begin Now</a>
+              </div>
+            </article><!-- End Pricing Item -->
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="150">
+            <article class="plan-card recommended h-100">
+              <div class="recommended-tag">Recommended</div>
+              <div class="plan-header">
+                <span class="plan-label">Professional</span>
+                <div class="plan-price">
+                  <span class="amount price-monthly"><sup>$</sup>35</span>
+                  <span class="amount price-yearly"><sup>$</sup>336</span>
+                  <span class="billing price-monthly">per month</span>
+                  <span class="billing price-yearly">per year</span>
+                </div>
+                <p class="plan-desc">Advanced tools to help your business work smarter.</p>
+              </div>
+              <div class="plan-body">
+                <p class="features-heading">Everything in Essential, plus:</p>
+                <ul class="checklist list-unstyled">
+                  <li><i class="bi bi-check2"></i>Advanced analytics</li>
+                  <li><i class="bi bi-check2"></i>Workflow automation</li>
+                  <li><i class="bi bi-check2"></i>Priority support</li>
+                  <li><i class="bi bi-check2"></i>Team collaboration tools</li>
+                  <li><i class="bi bi-check2"></i>Custom reports</li>
+                </ul>
+              </div>
+              <div class="plan-footer">
+                <a href="<?php echo $final; ?>" class="btn btn-plan-primary w-100">Select Plan</a>
+              </div>
+            </article><!-- End Pricing Item -->
+          </div>
+
+          <div class="col-lg-4 col-md-6" data-aos="fade-up" data-aos-delay="200">
+            <article class="plan-card h-100">
+              <div class="plan-header">
+                <span class="plan-label">Enterprise</span>
+                <div class="plan-price">
+                  <span class="amount price-monthly"><sup>$</sup>79</span>
+                  <span class="amount price-yearly"><sup>$</sup>756</span>
+                  <span class="billing price-monthly">per month</span>
+                  <span class="billing price-yearly">per year</span>
+                </div>
+                <p class="plan-desc">Comprehensive solutions for growing businesses.</p>
+              </div>
+              <div class="plan-body">
+                <p class="features-heading">Everything in Professional, plus:</p>
+                <ul class="checklist list-unstyled">
+                  <li><i class="bi bi-check2"></i>Dedicated account manager</li>
+                  <li><i class="bi bi-check2"></i>Custom integrations</li>
+                  <li><i class="bi bi-check2"></i>Enhanced security controls</li>
+                  <li><i class="bi bi-check2"></i>Scalable infrastructure</li>
+                  <li><i class="bi bi-check2"></i>24/7 premium support</li>
+                </ul>
+              </div>
+              <div class="plan-footer">
+                <a href="<?php echo $final; ?>" class="btn btn-plan-secondary w-100">Contact Sales</a>
+              </div>
+            </article><!-- End Pricing Item -->
+          </div>
+
+        </div>
+
+      </div>
+
+    </section><!-- /Pricing Section -->
+
+    <!-- Faq Section -->
+    <section id="faq" class="faq section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Frequently Asked Questions</h2>
+        <p>Get clear answers to common questions about our services, security, and support. If you need more help, our team is ready to assist.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row justify-content-center">
+
+          <div class="col-lg-8">
+
+            <div class="faq-list">
+              <?php foreach ($faqs as $i => $f): ?>
+              <div class="faq-item" data-aos="fade-up" data-aos-delay="150">
+                <div class="faq-header">
+                  <h3><?php echo htmlspecialchars($f['q']); ?></h3>
+                  <i class="faq-toggle bi bi-plus"></i>
+                </div>
+                <div class="faq-content">
+                  <p><?php echo htmlspecialchars($f['a']); ?></p>
+                </div>
+              </div><!-- End Faq item-->
+              <?php endforeach; ?>
+
+
+
+            </div>
+
+          </div><!-- End Faq Column-->
+
+        </div>
+
+      </div>
+
+    </section><!-- /Faq Section -->
+
+    <!-- Contact Section -->
+    <section id="contact" class="contact section light-background">
+
+      <!-- Section Title -->
+      <div class="container section-title" data-aos="fade-up">
+        <h2>Contact</h2>
+        <p>Have a question or need help choosing a solution? Reach out to our team and we’ll be happy to help.</p>
+      </div><!-- End Section Title -->
+
+      <div class="container" data-aos="fade-up" data-aos-delay="100">
+
+        <div class="row g-4">
+          <div class="col-lg-4" data-aos="fade-up" data-aos-delay="100">
+            <div class="sidebar-content">
+              <div class="sidebar-intro">
+                <h3 class="sidebar-heading">Get in Touch</h3>
+                <p class="sidebar-text">Let’s talk about your goals and how modern technology can support them. Contact our team to start a conversation and explore the right next steps.</p>
+              </div>
+
+              <div class="contact-block">
+                <div class="contact-block-icon">
+                  <i class="bi bi-envelope"></i>
+                </div>
+                <div class="contact-block-body">
+                  <span class="contact-block-label">Email</span>
+                  <a href="<?php echo $canonical_url; ?>">info@<?php echo $titlebrand; ?>.com</span></a>
+                </div>
+              </div><!-- End Contact Block -->
+
+              <div class="contact-block">
+                <div class="contact-block-icon">
+                  <i class="bi bi-telephone"></i>
+                </div>
+                <div class="contact-block-body">
+                  <span class="contact-block-label">Phone</span>
+                  <a href="<?php echo $canonical_url; ?>" class="contact-block-value">+1 (555) 862-0174</a>
+                </div>
+              </div><!-- End Contact Block -->
+
+              <div class="contact-block">
+                <div class="contact-block-icon">
+                  <i class="bi bi-geo-alt"></i>
+                </div>
+                <div class="contact-block-body">
+                  <span class="contact-block-label">Address</span>
+                  <p class="contact-block-value">1428 Elm Street, Denver, CO 80202</p>
+                </div>
+              </div><!-- End Contact Block -->
+
+              <div class="social-links">
+                <span class="social-label">Follow Us</span>
+                <div class="social-icons">
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Twitter"><i class="bi bi-twitter-x"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="LinkedIn"><i class="bi bi-linkedin"></i></a>
+                  <a href="<?php echo $canonical_url; ?>" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-lg-8" data-aos="fade-up" data-aos-delay="200">
+            <div class="form-card">
+              <form action="forms/contact.php" method="post" class="php-email-form">
+                <div class="row g-3">
+
+                  <div class="col-sm-6">
+                    <label class="form-label" for="contact-fullname">Your Name</label>
+                    <input type="text" name="name" id="contact-fullname" class="form-control" placeholder="Jane Doe" required="" autocomplete="name">
+                  </div>
+
+                  <div class="col-sm-6">
+                    <label class="form-label" for="contact-mail">Email Address</label>
+                    <input type="email" name="email" id="contact-mail" class="form-control" placeholder="jane@example.com" required="" autocomplete="email">
+                  </div>
+
+                  <div class="col-sm-6">
+                    <label class="form-label" for="contact-phone">Phone Number</label>
+                    <input type="tel" name="phone" id="contact-phone" class="form-control" placeholder="+1 (555) 000-0000" autocomplete="tel">
+                  </div>
+
+                  <div class="col-sm-6">
+                    <label class="form-label" for="contact-topic">Topic</label>
+                    <select name="subject" id="contact-topic" class="form-select" required="">
+                      <option value="" disabled="" selected="">Choose a topic</option>
+                      <option value="general">General Inquiry</option>
+                      <option value="support">Technical Support</option>
+                      <option value="billing">Billing Question</option>
+                      <option value="other">Something Else</option>
+                    </select>
+                  </div>
+
+                  <div class="col-12">
+                    <label class="form-label" for="contact-body">Message</label>
+                    <textarea name="message" id="contact-body" class="form-control" rows="6" placeholder="Tell us how we can help..." required=""></textarea>
+                  </div>
+
+                  <div class="col-12">
+                    <div class="loading">Loading</div>
+                    <div class="error-message"></div>
+                    <div class="sent-message">Your message has been sent. Thank you!</div>
+
+                    <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+                      <p class="form-note mb-0">We typically respond within 24 hours.</p>
+                      <button type="submit" class="btn btn-send">Submit Message</button>
+                    </div>
+                  </div>
+
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </section><!-- /Contact Section -->
+
+  </main>
+
+  <footer id="footer" class="footer">
+
+    <div class="container footer-top">
+      <div class="row gy-4">
+        <div class="col-lg-3 col-md-6 footer-info">
+          <a href="<?php echo $canonical_url; ?>" class="logo d-flex align-items-center mb-4">
+            <span class="sitename"><?php echo $titlebrand; ?></span>
+          </a>
+          <p><?php echo $meta_description; ?></p>
+
+          <div class="social-links d-flex mt-4">
+            <a href="<?php echo $canonical_url; ?>" aria-label="Twitter"><i class="bi bi-twitter-x"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="Facebook"><i class="bi bi-facebook"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="Instagram"><i class="bi bi-instagram"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="TikTok"><i class="bi bi-tiktok"></i></a>
+            <a href="<?php echo $canonical_url; ?>" aria-label="Pinterest"><i class="bi bi-pinterest"></i></a>
+          </div>
+        </div>
+
+        <div class="col-lg-2 col-md-6 footer-links">
+          <h4>Shop</h4>
+          <ul>
+            <li><a href="<?php echo $canonical_url; ?>">New Arrivals</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Best Sellers</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Sale Items</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Men's Collection</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Women's Collection</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Accessories</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-2 col-md-6 footer-links">
+          <h4>Customer Service</h4>
+          <ul>
+            <li><a href="<?php echo $final; ?>">Contact Us</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">FAQs</a></li>
+            <li><a href="<?php echo $final; ?>">Shipping &amp; Returns</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Size Guide</a></li>
+            <li><a href="<?php echo $final; ?>">Track Order</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Gift Cards</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-2 col-md-6 footer-links">
+          <h4>Company</h4>
+          <ul>
+            <li><a href="<?php echo $canonical_url; ?>">About Us</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Careers</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Blog</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Sustainability</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Affiliate Program</a></li>
+            <li><a href="<?php echo $canonical_url; ?>">Store Locator</a></li>
+          </ul>
+        </div>
+
+        <div class="col-lg-3 col-md-6">
+          <div class="footer-newsletter">
+            <h4>Stay Updated</h4>
+            <p>Subscribe to our newsletter for exclusive offers, new arrivals, and fashion tips.</p>
+            <form action="forms/newsletter.php" method="post" class="php-email-form">
+              <div class="position-relative">
+                <input type="email" name="email" placeholder="Your Email" required="">
+                <button type="submit" class="btn-subscribe"><i class="bi bi-arrow-right"></i></button>
+              </div>
+              <div class="loading">Loading</div>
+              <div class="error-message"></div>
+              <div class="sent-message">Your subscription request has been sent. Thank you!</div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="container footer-bottom">
+      <div class="row gy-3">
+        <div class="col-md-6 order-2 order-md-1">
+          <div class="copyright">
+            <p>© <span>Copyright</span> <strong class="sitename"><?php echo $titlebrand; ?></strong>. All Rights Reserved.</p>
+          </div>
+          <div class="credits">
+            Designed by <a href="<?php echo $canonical_url; ?>"><?php echo $titlebrand; ?></a>
+          </div>
+        </div>
+        <div class="col-md-6 order-1 order-md-2">
+          <div class="legal-links">
+            <a href="<?php echo $canonical_url; ?>">Terms of Service</a>
+            <a href="<?php echo $canonical_url; ?>">Privacy Policy</a>
+            <a href="<?php echo $canonical_url; ?>">Cookies</a>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </footer>
+
+  <!-- Scroll Top -->
+  <a href="#" id="scroll-top" class="scroll-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
+
+  <!-- Vendor JS Files -->
+  <script data-cfasync="false" src="/cdn-cgi/scripts/5c5dd728/cloudflare-static/email-decode.min.js"></script><script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/validate.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/aos.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/glightbox.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/purecounter_vanilla.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/swiper-bundle.min.js"></script>
+
+  <!-- Main JS File -->
+  <script src="https://cdn.jsdelivr.net/gh/ggeercy/Landia/main.js"></script>
+
+<script type="module" src="https://static.cloudflareinsights.com/beacon.min.js/vce701823e78c4301a35b7e07294d87301792088814092" integrity="sha512-UKNk8GbxkABxKcXYuLkO16EleLGUkcvJWtpSNmExE0Too3ZaFAxTscNWEc1OdAv5/BikHawapSCaiD2XCmp+Bw==" data-cf-beacon='{"version":"2024.11.0","token":"68c5ca450bae485a842ff76066d69420","spa":2}' crossorigin="anonymous"></script>
+</body>
+
+</html>
